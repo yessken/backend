@@ -1,0 +1,6 @@
+[build]
+builder = "nixpacks"
+buildCommand = "dotnet publish TusaMap.Api/TusaMap.Api.csproj -c Release -o out"
+
+[deploy]
+startCommand = "dotnet out/TusaMap.Api.dll"
