@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using System.ComponentModel.DataAnnotations;
 using TusaMap.Api.Models;
 using TusaMap.Api.Services;
+using TusaMap.Api.Data;
 
 namespace TusaMap.Api.Controllers;
 
@@ -12,12 +13,14 @@ public class EventsController : ControllerBase
     private readonly IEventsStore _store;
     private readonly ITelegramAuthService _telegramAuth;
     private readonly IUserStore _users;
+    private readonly TusaMapDbContext _db;
 
-    public EventsController(IEventsStore store, ITelegramAuthService telegramAuth, IUserStore users)
+    public EventsController(IEventsStore store, ITelegramAuthService telegramAuth, IUserStore users, TusaMapDbContext db)
     {
         _store = store;
         _telegramAuth = telegramAuth;
         _users = users;
+        _db = db;
     }
 
     [HttpGet]
@@ -63,6 +66,18 @@ public class EventsController : ControllerBase
             ,OrganizerTelegramId = user.Id
         };
         var created = _store.Add(e);
+        if (req.TicketCategories.Count > 0)
+        {
+            _db.TicketCategories.AddRange(req.TicketCategories.Select(category => new TicketCategory
+            {
+                EventId = created.Id,
+                Name = category.Name,
+                Description = category.Description ?? "",
+                Price = category.Price,
+                Capacity = category.Capacity,
+            }));
+            _db.SaveChanges();
+        }
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 
@@ -104,4 +119,13 @@ public class CreateEventRequest
     public decimal? Price { get; set; }
     public string? ImageUrl { get; set; }
     public string? OrganizerName { get; set; }
+    public List<CreateTicketCategoryRequest> TicketCategories { get; set; } = [];
+}
+
+public class CreateTicketCategoryRequest
+{
+    [Required, StringLength(80, MinimumLength = 2)] public string Name { get; set; } = "";
+    [Range(0, 100000000)] public decimal Price { get; set; }
+    [Range(1, 1000000)] public int Capacity { get; set; }
+    [StringLength(300)] public string? Description { get; set; }
 }
