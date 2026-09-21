@@ -101,6 +101,20 @@ public class TicketsController : ControllerBase
         if (draft is null) return BadRequest(error);
         return Ok(new TicketQuoteResponse(draft.Category.Id, draft.Category.Name, draft.Quantity, draft.BaseAmount, draft.DiscountAmount, draft.CommissionAmount, draft.TotalAmount));
     }
+
+    [HttpPost("{id}/cancel")]
+    public IActionResult Cancel(string id, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
+    {
+        var user = _telegramAuth.ValidateInitData(initData);
+        if (user is null) return Unauthorized();
+        var ticket = _db.Tickets.FirstOrDefault(x => x.Id == id && x.TelegramUserId == user.Id);
+        if (ticket is null) return NotFound();
+        if (ticket.CancelledAt is not null) return Conflict("Ticket is already cancelled");
+        ticket.CancelledAt = DateTime.UtcNow;
+        ticket.RefundStatus = ticket.PaymentStatus == "paid" ? "requested" : "not_required";
+        _db.SaveChanges();
+        return Ok(new { ticket.Id, ticket.RefundStatus, ticket.CancelledAt });
+    }
 }
 
 public class PurchaseTicketRequest

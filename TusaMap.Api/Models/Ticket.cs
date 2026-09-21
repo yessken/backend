@@ -21,4 +21,7 @@ public class Ticket
     public decimal CommissionAmount { get; set; }
     public decimal TotalAmount { get; set; }
     public string? PromoCode { get; set; }
+    public string RefundStatus { get; set; } = "none";
+    public DateTime? CancelledAt { get; set; }
+    public TicketCheckIn? CheckIn { get; set; }
 }

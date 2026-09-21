@@ -11,15 +11,17 @@ public class PaymentsController : ControllerBase
 {
     private readonly ITicketsStore _tickets;
     private readonly IConfiguration _configuration;
+    private readonly ITelegramBotService _telegramBot;
 
-    public PaymentsController(ITicketsStore tickets, IConfiguration configuration)
+    public PaymentsController(ITicketsStore tickets, IConfiguration configuration, ITelegramBotService telegramBot)
     {
         _tickets = tickets;
         _configuration = configuration;
+        _telegramBot = telegramBot;
     }
 
     [HttpPost("webhook")]
-    public ActionResult<WebhookResponse> Webhook(
+    public async Task<ActionResult<WebhookResponse>> Webhook(
         [FromBody] PaymentWebhookRequest request,
         [FromHeader(Name = "X-Payment-Webhook-Secret")] string? secret)
     {
@@ -31,6 +33,8 @@ public class PaymentsController : ControllerBase
             return Unauthorized();
 
         var ticket = _tickets.MarkPaid(request.PaymentReference);
+        if (ticket is not null)
+            await _telegramBot.SendTicketAsync(ticket);
         return ticket is null
             ? NotFound()
             : Ok(new WebhookResponse(ticket.Id, ticket.PaymentStatus, ticket.QrCode));

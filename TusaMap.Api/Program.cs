@@ -10,6 +10,7 @@ builder.WebHost.UseUrls($"http://*:{port}");
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddHttpClient();
 
 var connectionString = builder.Configuration.GetConnectionString("Default");
 if (string.IsNullOrWhiteSpace(connectionString))
@@ -27,6 +28,7 @@ builder.Services.AddScoped<ITicketsStore, TicketsStore>();
 builder.Services.AddScoped<IUserStore, UserStore>();
 builder.Services.AddScoped<ITicketPricingService, TicketPricingService>();
 builder.Services.AddSingleton<ITelegramAuthService, TelegramAuthService>();
+builder.Services.AddScoped<ITelegramBotService, TelegramBotService>();
 
 builder.Services.AddCors(options =>
 {

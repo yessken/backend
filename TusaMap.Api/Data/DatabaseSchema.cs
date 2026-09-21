@@ -33,8 +33,22 @@ public static class DatabaseSchema
                 TicketId TEXT NOT NULL, CreatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
             """);
+        CreateTable(db, "FunnelEvents", """
+            CREATE TABLE IF NOT EXISTS FunnelEvents (
+                Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, Name TEXT NOT NULL,
+                EventId TEXT NULL, Ref TEXT NULL, TelegramUserId INTEGER NULL,
+                CreatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """);
+        CreateTable(db, "TicketCheckIns", """
+            CREATE TABLE IF NOT EXISTS TicketCheckIns (
+                Id TEXT NOT NULL PRIMARY KEY, TicketId TEXT NOT NULL,
+                CheckedByTelegramUserId INTEGER NOT NULL, CheckedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """);
 
         AddColumnIfMissing(db, "Events", "OrganizerTelegramId", "INTEGER NOT NULL DEFAULT 0");
+        AddColumnIfMissing(db, "Events", "OrganizerEmail", "TEXT NOT NULL DEFAULT ''");
         AddColumnIfMissing(db, "Events", "Status", "TEXT NOT NULL DEFAULT 'approved'");
         AddColumnIfMissing(db, "Events", "CreatedAt", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
         AddColumnIfMissing(db, "Tickets", "PaymentMethod", "TEXT NOT NULL DEFAULT ''");
@@ -49,9 +63,13 @@ public static class DatabaseSchema
         AddColumnIfMissing(db, "Tickets", "CommissionAmount", "TEXT NOT NULL DEFAULT '0'");
         AddColumnIfMissing(db, "Tickets", "TotalAmount", "TEXT NOT NULL DEFAULT '0'");
         AddColumnIfMissing(db, "Tickets", "PromoCode", "TEXT NULL");
+        AddColumnIfMissing(db, "Tickets", "RefundStatus", "TEXT NOT NULL DEFAULT 'none'");
+        AddColumnIfMissing(db, "Tickets", "CancelledAt", "TEXT NULL");
 
         db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_PromoCodes_Code ON PromoCodes (Code)");
         db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_PromoRedemptions_Code_User ON PromoRedemptions (PromoCodeId, TelegramUserId)");
+        db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_FunnelEvents_Name_Event_Ref ON FunnelEvents (Name, EventId, Ref)");
+        db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_TicketCheckIns_TicketId ON TicketCheckIns (TicketId)");
     }
 
     private static void CreateTable(TusaMapDbContext db, string _, string sql) => db.Database.ExecuteSqlRaw(sql);

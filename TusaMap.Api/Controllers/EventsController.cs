@@ -63,6 +63,7 @@ public class EventsController : ControllerBase
             Price = req.Price,
             ImageUrl = req.ImageUrl ?? "",
             OrganizerName = req.OrganizerName ?? ""
+            ,OrganizerEmail = req.OrganizerEmail ?? ""
             ,OrganizerTelegramId = user.Id
         };
         var created = _store.Add(e);
@@ -119,6 +120,8 @@ public class CreateEventRequest
     public decimal? Price { get; set; }
     public string? ImageUrl { get; set; }
     public string? OrganizerName { get; set; }
+    [EmailAddress, StringLength(254)]
+    public string? OrganizerEmail { get; set; }
     public List<CreateTicketCategoryRequest> TicketCategories { get; set; } = [];
 }
 
