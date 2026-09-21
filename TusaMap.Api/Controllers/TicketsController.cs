@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using System.ComponentModel.DataAnnotations;
 using TusaMap.Api.Models;
 using TusaMap.Api.Services;
 
@@ -41,13 +42,17 @@ public class TicketsController : ControllerBase
         if (ev == null)
             return NotFound("Event not found");
 
+        if (request.PaymentMethod is not ("kaspi" or "telegram"))
+            return BadRequest("PaymentMethod must be kaspi or telegram");
+
         var ticket = new Ticket
         {
             EventId = ev.Id,
             EventTitle = ev.Title,
             EventDate = ev.Date,
             EventPlace = ev.Place,
-            QrCode = "TUSA-" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()
+            PaymentMethod = request.PaymentMethod,
+            PaymentStatus = "pending"
         };
         var created = _ticketsStore.Add(ticket, user.Id);
         return Ok(created);
@@ -56,5 +61,8 @@ public class TicketsController : ControllerBase
 
 public class PurchaseTicketRequest
 {
+    [Required]
     public string EventId { get; set; } = "";
+    [Required]
+    public string PaymentMethod { get; set; } = "";
 }

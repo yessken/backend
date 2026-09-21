@@ -41,7 +41,18 @@ public class TelegramAuthService : ITelegramAuthService
         var computedHash = hmac2.ComputeHash(Encoding.UTF8.GetBytes(dataCheckString));
         var hashHex = Convert.ToHexString(computedHash).ToLowerInvariant();
 
-        if (hash != hashHex)
+        if (!CryptographicOperations.FixedTimeEquals(
+                Encoding.UTF8.GetBytes(hash.ToLowerInvariant()),
+                Encoding.UTF8.GetBytes(hashHex)))
+            return null;
+
+        if (!parsed.TryGetValue("auth_date", out var authDateValue) ||
+            !long.TryParse(authDateValue, out var authDate))
+            return null;
+
+        var issuedAt = DateTimeOffset.FromUnixTimeSeconds(authDate);
+        if (issuedAt > DateTimeOffset.UtcNow.AddMinutes(1) ||
+            DateTimeOffset.UtcNow - issuedAt > TimeSpan.FromHours(24))
             return null;
 
         var userJson = parsed.GetValueOrDefault("user");

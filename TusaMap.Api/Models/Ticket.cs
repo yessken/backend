@@ -9,4 +9,6 @@ public class Ticket
     public string EventPlace { get; set; } = "";
     public string? QrCode { get; set; }
     public string PurchasedAt { get; set; } = "";
+    public string PaymentMethod { get; set; } = "";
+    public string PaymentStatus { get; set; } = "pending";
 }

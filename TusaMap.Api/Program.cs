@@ -17,9 +17,13 @@ builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.AllowAnyOrigin()
+        var origins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? Array.Empty<string>();
+        if (origins.Length == 0)
+            throw new InvalidOperationException("Configure at least one Cors:Origins value before starting the API.");
+
+        policy.WithOrigins(origins)
               .AllowAnyMethod()
-              .AllowAnyHeader();
+              .WithHeaders("Content-Type", "X-Telegram-Init-Data");
     });
 });
 

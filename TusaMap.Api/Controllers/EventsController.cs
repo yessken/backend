@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using System.ComponentModel.DataAnnotations;
 using TusaMap.Api.Models;
 using TusaMap.Api.Services;
 
@@ -36,7 +37,7 @@ public class EventsController : ControllerBase
     [HttpPost]
     public ActionResult<EventItem> Create([FromBody] CreateEventRequest req, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
     {
-        var user = HttpContext.RequestServices.GetService<ITelegramAuthService>()?.ValidateInitData(initData);
+        var user = HttpContext.RequestServices.GetRequiredService<ITelegramAuthService>().ValidateInitData(initData);
         if (user == null)
             return Unauthorized("Invalid or missing Telegram initData");
 
@@ -62,15 +63,21 @@ public class EventsController : ControllerBase
 
 public class CreateEventRequest
 {
+    [Required, StringLength(120, MinimumLength = 3)]
     public string Title { get; set; } = "";
     public string? Description { get; set; }
+    [Required, StringLength(10)]
     public string Date { get; set; } = "";
     public string? Time { get; set; }
+    [Required, StringLength(160, MinimumLength = 2)]
     public string Place { get; set; } = "";
     public string? Address { get; set; }
+    [Range(-90, 90)]
     public double Lat { get; set; }
+    [Range(-180, 180)]
     public double Lng { get; set; }
     public string? Category { get; set; }
+    [Range(0, 100000000)]
     public decimal? Price { get; set; }
     public string? ImageUrl { get; set; }
     public string? OrganizerName { get; set; }
