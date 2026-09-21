@@ -12,12 +12,14 @@ public class TicketsController : ControllerBase
     private readonly ITicketsStore _ticketsStore;
     private readonly IEventsStore _eventsStore;
     private readonly ITelegramAuthService _telegramAuth;
+    private readonly IUserStore _users;
 
-    public TicketsController(ITicketsStore ticketsStore, IEventsStore eventsStore, ITelegramAuthService telegramAuth)
+    public TicketsController(ITicketsStore ticketsStore, IEventsStore eventsStore, ITelegramAuthService telegramAuth, IUserStore users)
     {
         _ticketsStore = ticketsStore;
         _eventsStore = eventsStore;
         _telegramAuth = telegramAuth;
+        _users = users;
     }
 
     [HttpGet("me")]
@@ -26,6 +28,7 @@ public class TicketsController : ControllerBase
         var user = _telegramAuth.ValidateInitData(initData);
         if (user == null)
             return Unauthorized("Invalid or missing Telegram initData");
+        _users.Upsert(user);
 
         var list = _ticketsStore.GetByUserId(user.Id);
         return Ok(list);
@@ -37,6 +40,7 @@ public class TicketsController : ControllerBase
         var user = _telegramAuth.ValidateInitData(initData);
         if (user == null)
             return Unauthorized("Invalid or missing Telegram initData");
+        _users.Upsert(user);
 
         var ev = _eventsStore.GetById(request.EventId);
         if (ev == null)
@@ -52,10 +56,11 @@ public class TicketsController : ControllerBase
             EventDate = ev.Date,
             EventPlace = ev.Place,
             PaymentMethod = request.PaymentMethod,
-            PaymentStatus = "pending"
+            PaymentStatus = "pending",
+            PaymentReference = Guid.NewGuid().ToString("N")
         };
         var created = _ticketsStore.Add(ticket, user.Id);
-        return Ok(created);
+        return StatusCode(StatusCodes.Status202Accepted, created);
     }
 }
 

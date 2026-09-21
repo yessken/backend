@@ -11,4 +11,6 @@ public class Ticket
     public string PurchasedAt { get; set; } = "";
     public string PaymentMethod { get; set; } = "";
     public string PaymentStatus { get; set; } = "pending";
+    public long TelegramUserId { get; set; }
+    public string? PaymentReference { get; set; }
 }

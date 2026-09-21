@@ -10,10 +10,14 @@ namespace TusaMap.Api.Controllers;
 public class EventsController : ControllerBase
 {
     private readonly IEventsStore _store;
+    private readonly ITelegramAuthService _telegramAuth;
+    private readonly IUserStore _users;
 
-    public EventsController(IEventsStore store)
+    public EventsController(IEventsStore store, ITelegramAuthService telegramAuth, IUserStore users)
     {
         _store = store;
+        _telegramAuth = telegramAuth;
+        _users = users;
     }
 
     [HttpGet]
@@ -40,6 +44,7 @@ public class EventsController : ControllerBase
         var user = HttpContext.RequestServices.GetRequiredService<ITelegramAuthService>().ValidateInitData(initData);
         if (user == null)
             return Unauthorized("Invalid or missing Telegram initData");
+        _users.Upsert(user);
 
         var e = new EventItem
         {
@@ -55,9 +60,27 @@ public class EventsController : ControllerBase
             Price = req.Price,
             ImageUrl = req.ImageUrl ?? "",
             OrganizerName = req.OrganizerName ?? ""
+            ,OrganizerTelegramId = user.Id
         };
         var created = _store.Add(e);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+    }
+
+    [HttpGet("pending")]
+    public ActionResult<IEnumerable<EventItem>> Pending([FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
+    {
+        var user = _telegramAuth.ValidateInitData(initData);
+        if (user is null || !_users.IsAdmin(user.Id)) return Forbid();
+        return Ok(_store.GetPending());
+    }
+
+    [HttpPost("{id}/approve")]
+    public ActionResult<EventItem> Approve(string id, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
+    {
+        var user = _telegramAuth.ValidateInitData(initData);
+        if (user is null || !_users.IsAdmin(user.Id)) return Forbid();
+        var approved = _store.Approve(id);
+        return approved is null ? NotFound() : Ok(approved);
     }
 }
 

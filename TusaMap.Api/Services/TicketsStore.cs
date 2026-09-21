@@ -1,4 +1,6 @@
 using TusaMap.Api.Models;
+using Microsoft.EntityFrameworkCore;
+using TusaMap.Api.Data;
 
 namespace TusaMap.Api.Services;
 
@@ -6,27 +8,40 @@ public interface ITicketsStore
 {
     IReadOnlyList<Ticket> GetByUserId(long telegramUserId);
     Ticket Add(Ticket t, long telegramUserId);
+    Ticket? MarkPaid(string reference);
 }
 
 public class TicketsStore : ITicketsStore
 {
-    private readonly List<(Ticket Ticket, long UserId)> _data = new();
-    private int _idCounter = 1;
+    private readonly TusaMapDbContext _db;
 
-    public TicketsStore()
+    public TicketsStore(TusaMapDbContext db)
     {
-        _data.Add((new Ticket { Id = "t1", EventId = "1", EventTitle = "Ночной концерт в столице", EventDate = "2025-03-15", EventPlace = "Клуб «Астана»", QrCode = "TUSA-T1-XXXX", PurchasedAt = "2025-03-01T12:00:00Z" }, 0));
-        _idCounter = 2;
+        _db = db;
     }
 
     public IReadOnlyList<Ticket> GetByUserId(long telegramUserId)
-        => _data.Where(x => x.UserId == telegramUserId).Select(x => x.Ticket).ToList();
+        => _db.Tickets.AsNoTracking().Where(x => x.TelegramUserId == telegramUserId).ToList();
 
     public Ticket Add(Ticket t, long telegramUserId)
     {
-        t.Id = "t" + (_idCounter++);
+        t.Id = Guid.NewGuid().ToString("N");
+        t.TelegramUserId = telegramUserId;
         t.PurchasedAt = DateTime.UtcNow.ToString("O");
-        _data.Add((t, telegramUserId));
+        _db.Tickets.Add(t);
+        _db.SaveChanges();
         return t;
+    }
+
+    public Ticket? GetByPaymentReference(string reference) => _db.Tickets.FirstOrDefault(x => x.PaymentReference == reference);
+
+    public Ticket? MarkPaid(string reference)
+    {
+        var ticket = GetByPaymentReference(reference);
+        if (ticket is null) return null;
+        ticket.PaymentStatus = "paid";
+        ticket.QrCode ??= "TUSA-" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        _db.SaveChanges();
+        return ticket;
     }
 }

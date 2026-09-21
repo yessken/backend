@@ -1,5 +1,8 @@
 bin/
 obj/
 out/
+TusaMap.Api/tusamap.db
+TusaMap.Api/tusamap.db-shm
+TusaMap.Api/tusamap.db-wal
 *.user
 .vs/
