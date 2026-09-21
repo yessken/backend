@@ -49,6 +49,7 @@ public static class DatabaseSchema
 
         AddColumnIfMissing(db, "Events", "OrganizerTelegramId", "INTEGER NOT NULL DEFAULT 0");
         AddColumnIfMissing(db, "Events", "OrganizerEmail", "TEXT NOT NULL DEFAULT ''");
+        AddColumnIfMissing(db, "Events", "OrganizerPhone", "TEXT NOT NULL DEFAULT ''");
         AddColumnIfMissing(db, "Events", "Status", "TEXT NOT NULL DEFAULT 'approved'");
         AddColumnIfMissing(db, "Events", "CreatedAt", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
         AddColumnIfMissing(db, "Tickets", "PaymentMethod", "TEXT NOT NULL DEFAULT ''");

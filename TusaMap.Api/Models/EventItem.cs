@@ -16,6 +16,7 @@ public class EventItem
     public string ImageUrl { get; set; } = "";
     public string OrganizerName { get; set; } = "";
     public string OrganizerEmail { get; set; } = "";
+    public string OrganizerPhone { get; set; } = "";
     public long OrganizerTelegramId { get; set; }
     public string Status { get; set; } = "pending";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

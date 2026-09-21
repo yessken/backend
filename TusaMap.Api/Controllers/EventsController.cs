@@ -64,6 +64,7 @@ public class EventsController : ControllerBase
             ImageUrl = req.ImageUrl ?? "",
             OrganizerName = req.OrganizerName ?? ""
             ,OrganizerEmail = req.OrganizerEmail ?? ""
+            ,OrganizerPhone = req.OrganizerPhone ?? ""
             ,OrganizerTelegramId = user.Id
         };
         var created = _store.Add(e);
@@ -122,6 +123,8 @@ public class CreateEventRequest
     public string? OrganizerName { get; set; }
     [EmailAddress, StringLength(254)]
     public string? OrganizerEmail { get; set; }
+    [Phone, StringLength(30)]
+    public string? OrganizerPhone { get; set; }
     public List<CreateTicketCategoryRequest> TicketCategories { get; set; } = [];
 }
 
