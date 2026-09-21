@@ -25,6 +25,7 @@ builder.Services.AddDbContext<TusaMapDbContext>(options =>
 builder.Services.AddScoped<IEventsStore, EventsStore>();
 builder.Services.AddScoped<ITicketsStore, TicketsStore>();
 builder.Services.AddScoped<IUserStore, UserStore>();
+builder.Services.AddScoped<ITicketPricingService, TicketPricingService>();
 builder.Services.AddSingleton<ITelegramAuthService, TelegramAuthService>();
 
 builder.Services.AddCors(options =>
@@ -47,6 +48,7 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<TusaMapDbContext>();
     db.Database.EnsureCreated();
+    DatabaseSchema.EnsureCompatible(db);
 }
 
 if (app.Environment.IsDevelopment())

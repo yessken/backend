@@ -18,4 +18,5 @@ public class EventItem
     public long OrganizerTelegramId { get; set; }
     public string Status { get; set; } = "pending";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public List<TicketCategory> TicketCategories { get; set; } = [];
 }

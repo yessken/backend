@@ -21,6 +21,7 @@ public class EventsStore : IEventsStore
     {
         _db = db;
         if (!_db.Events.Any()) Seed();
+        if (!_db.TicketCategories.Any()) SeedTicketCategories();
     }
 
     private void Seed()
@@ -36,10 +37,22 @@ public class EventsStore : IEventsStore
         _db.SaveChanges();
     }
 
-    public IReadOnlyList<EventItem> GetAll() => _db.Events.AsNoTracking().Where(e => e.Status == "approved").ToList();
-    public EventItem? GetById(string id) => _db.Events.AsNoTracking().FirstOrDefault(e => e.Id == id && e.Status == "approved");
+    public IReadOnlyList<EventItem> GetAll() => _db.Events.AsNoTracking().Include(e => e.TicketCategories).Where(e => e.Status == "approved").ToList();
+    public EventItem? GetById(string id) => _db.Events.AsNoTracking().Include(e => e.TicketCategories).FirstOrDefault(e => e.Id == id && e.Status == "approved");
     public IReadOnlyList<EventItem> GetPending() => _db.Events.AsNoTracking().Where(e => e.Status == "pending").ToList();
     public EventItem? Approve(string id) { var e = _db.Events.Find(id); if (e is null) return null; e.Status = "approved"; _db.SaveChanges(); return e; }
+
+    private void SeedTicketCategories()
+    {
+        _db.TicketCategories.AddRange(
+            new TicketCategory { EventId = "1", Name = "Стандарт", Price = 3500, Capacity = 300 },
+            new TicketCategory { EventId = "1", Name = "VIP", Price = 7000, Capacity = 40 },
+            new TicketCategory { EventId = "2", Name = "Вход", Price = 0, Capacity = 500 },
+            new TicketCategory { EventId = "3", Name = "Танцпол", Price = 5000, Capacity = 250 },
+            new TicketCategory { EventId = "3", Name = "VIP", Price = 10000, Capacity = 30 },
+            new TicketCategory { EventId = "4", Name = "Стандарт", Price = 2500, Capacity = 180 });
+        _db.SaveChanges();
+    }
 
     public EventItem Add(EventItem e)
     {

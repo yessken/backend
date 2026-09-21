@@ -13,4 +13,12 @@ public class Ticket
     public string PaymentStatus { get; set; } = "pending";
     public long TelegramUserId { get; set; }
     public string? PaymentReference { get; set; }
+    public string TicketCategoryId { get; set; } = "";
+    public string TicketCategoryName { get; set; } = "";
+    public int Quantity { get; set; } = 1;
+    public decimal BaseAmount { get; set; }
+    public decimal DiscountAmount { get; set; }
+    public decimal CommissionAmount { get; set; }
+    public decimal TotalAmount { get; set; }
+    public string? PromoCode { get; set; }
 }

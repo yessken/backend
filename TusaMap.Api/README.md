@@ -41,11 +41,14 @@ dotnet run --project .\TusaMap.Api\TusaMap.Api.csproj
 
 - `GET /api/events` — список мероприятий (query: `category`)
 - `GET /api/events/{id}` — мероприятие по id
+- `POST /api/events/{id}/ticket-categories` — добавить тариф билета владельцу события или admin
+- `POST /api/events/{id}/promo-codes` — добавить промокод владельцу события или admin
 - `POST /api/events` — отправить мероприятие на модерацию (заголовок `X-Telegram-Init-Data`)
 - `GET /api/events/pending` — список заявок для admin Telegram ID
 - `POST /api/events/{id}/approve` — одобрить событие для admin Telegram ID
 - `GET /api/tickets/me` — мои билеты (заголовок `X-Telegram-Init-Data`)
 - `POST /api/tickets` — создать заказ со статусом `pending` (body: `{ "eventId": "1", "paymentMethod": "kaspi" }`)
+- `POST /api/tickets/quote` — проверить цену, категорию, лимит и промокод до создания заказа
 - `POST /api/payments/webhook` — подтвердить оплату секретным webhook-запросом; после этого создаётся QR-код
 
 Для production задай:
