@@ -48,8 +48,10 @@ dotnet run --project .\TusaMap.Api\TusaMap.Api.csproj
 - `POST /api/events/{id}/approve` — одобрить событие для admin Telegram ID
 - `GET /api/tickets/me` — мои билеты (заголовок `X-Telegram-Init-Data`)
 - `POST /api/tickets` — создать заказ со статусом `pending` (body: `{ "eventId": "1", "paymentMethod": "kaspi" }`)
+- `POST /api/tickets/public` — legacy web order endpoint; web checkout now redirects to Telegram instead
 - `POST /api/tickets/quote` — проверить цену, категорию, лимит и промокод до создания заказа
 - `POST /api/payments/webhook` — подтвердить оплату секретным webhook-запросом; после этого создаётся QR-код
+- `POST /api/telegram/webhook` — Telegram updates, включая web deep-link `/start event_{eventId}` and Stars payments
 
 Для production задай:
 
@@ -57,4 +59,8 @@ dotnet run --project .\TusaMap.Api\TusaMap.Api.csproj
 - `Telegram__BotToken` — токен бота;
 - `Telegram__AdminUserIds__0` — Telegram ID администратора;
 - `Payments__WebhookSecret` — секрет платёжного webhook;
+- `Payments__TelegramStarsPerKzt` — conversion rate used for Telegram Stars invoices; set explicitly before enabling payments (for example, `0` keeps payment disabled);
+- `Telegram__WebhookSecret` — secret used when registering the Telegram webhook;
 - `Cors__Origins__0` — разрешённый frontend origin.
+
+The public web checkout deliberately does not create an anonymous order. It opens the bot with an event deep link, and the Telegram webhook creates the order only when it can create a Stars invoice. This prevents seats from being reserved by abandoned browser sessions.
