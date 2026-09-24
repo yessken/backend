@@ -44,7 +44,7 @@ public class TicketPricingService : ITicketPricingService
             var now = DateTime.UtcNow;
             if (promo.StartsAt > now || promo.ExpiresAt < now || promo.MaxUses is not null && promo.UsedCount >= promo.MaxUses)
             { error = "Promo code has expired or reached its limit"; return null; }
-            if (_db.PromoRedemptions.Count(x => x.PromoCodeId == promo.Id && x.TelegramUserId == userId) >= promo.PerUserLimit)
+            if (userId != 0 && _db.PromoRedemptions.Count(x => x.PromoCodeId == promo.Id && x.TelegramUserId == userId) >= promo.PerUserLimit)
             { error = "Promo code has already been used"; return null; }
             discount = promo.DiscountType == "fixed" ? promo.Value : baseAmount * promo.Value / 100m;
             discount = Math.Min(discount, baseAmount);

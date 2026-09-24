@@ -47,6 +47,17 @@ public class TicketsController : ControllerBase
         if (user == null)
             return Unauthorized("Invalid or missing Telegram initData");
         _users.Upsert(user);
+        return CreateOrder(request, user.Id);
+    }
+
+    [HttpPost("public")]
+    public ActionResult<Ticket> PurchasePublic([FromBody] PurchaseTicketRequest request)
+    {
+        return CreateOrder(request, 0);
+    }
+
+    private ActionResult<Ticket> CreateOrder(PurchaseTicketRequest request, long userId)
+    {
 
         var ev = _eventsStore.GetById(request.EventId);
         if (ev == null)
@@ -55,12 +66,17 @@ public class TicketsController : ControllerBase
         if (request.PaymentMethod is not ("kaspi" or "telegram"))
             return BadRequest("PaymentMethod must be kaspi or telegram");
 
-        var draft = _pricing.Quote(request.EventId, request.TicketCategoryId, request.Quantity, request.PromoCode, user.Id, out var error);
+        var draft = _pricing.Quote(request.EventId, request.TicketCategoryId, request.Quantity, request.PromoCode, userId, out var error);
         if (draft is null) return BadRequest(error);
 
         using var transaction = _db.Database.BeginTransaction();
+        var reserved = _db.Database.ExecuteSqlInterpolated($"UPDATE TicketCategories SET Sold = Sold + {draft.Quantity} WHERE Id = {draft.Category.Id} AND IsActive = 1 AND Capacity - Sold >= {draft.Quantity}");
+        if (reserved != 1)
+        {
+            transaction.Rollback();
+            return Conflict("Tickets are no longer available");
+        }
         var category = _db.TicketCategories.First(x => x.Id == draft.Category.Id);
-        category.Sold += draft.Quantity;
 
         var ticket = new Ticket
         {
@@ -80,11 +96,12 @@ public class TicketsController : ControllerBase
             TotalAmount = draft.TotalAmount,
             PromoCode = draft.Promo?.Code
         };
-        var created = _ticketsStore.Add(ticket, user.Id);
+        var created = _ticketsStore.Add(ticket, userId);
         if (draft.Promo is not null)
         {
             draft.Promo.UsedCount++;
-            _db.PromoRedemptions.Add(new Models.PromoRedemption { PromoCodeId = draft.Promo.Id, TelegramUserId = user.Id, TicketId = created.Id });
+            if (userId != 0)
+                _db.PromoRedemptions.Add(new Models.PromoRedemption { PromoCodeId = draft.Promo.Id, TelegramUserId = userId, TicketId = created.Id });
             _db.SaveChanges();
         }
         transaction.Commit();
