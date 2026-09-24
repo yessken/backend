@@ -8,6 +8,7 @@ public interface ITicketsStore
 {
     IReadOnlyList<Ticket> GetByUserId(long telegramUserId);
     Ticket Add(Ticket t, long telegramUserId);
+    Ticket? GetByPaymentReference(string reference);
     Ticket? MarkPaid(string reference);
 }
 

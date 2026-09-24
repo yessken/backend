@@ -10,7 +10,7 @@ namespace TusaMap.Api.Controllers;
 [Route("api/analytics")]
 public class AnalyticsController : ControllerBase
 {
-    private static readonly string[] AllowedEvents = ["catalog_view", "event_open", "checkout_view", "payment_start", "purchase_success", "event_share"];
+    private static readonly string[] AllowedEvents = ["catalog_view", "event_open", "checkout_view", "payment_start", "purchase_success", "event_share", "organizer_lead"];
     private readonly TusaMapDbContext _db;
     private readonly ITelegramAuthService _auth;
     private readonly IUserStore _users;

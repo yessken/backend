@@ -44,11 +44,21 @@ public class EventsController : ControllerBase
     [HttpPost]
     public ActionResult<EventItem> Create([FromBody] CreateEventRequest req, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
     {
-        var user = HttpContext.RequestServices.GetRequiredService<ITelegramAuthService>().ValidateInitData(initData);
+        var user = _telegramAuth.ValidateInitData(initData);
         if (user == null)
             return Unauthorized("Invalid or missing Telegram initData");
         _users.Upsert(user);
+        return AddEvent(req, user.Id);
+    }
 
+    [HttpPost("public")]
+    public ActionResult<EventItem> CreatePublic([FromBody] CreateEventRequest req)
+    {
+        return AddEvent(req, 0);
+    }
+
+    private ActionResult<EventItem> AddEvent(CreateEventRequest req, long organizerTelegramId)
+    {
         var e = new EventItem
         {
             Title = req.Title,
@@ -65,7 +75,7 @@ public class EventsController : ControllerBase
             OrganizerName = req.OrganizerName ?? ""
             ,OrganizerEmail = req.OrganizerEmail ?? ""
             ,OrganizerPhone = req.OrganizerPhone ?? ""
-            ,OrganizerTelegramId = user.Id
+            ,OrganizerTelegramId = organizerTelegramId
         };
         var created = _store.Add(e);
         if (req.TicketCategories.Count > 0)

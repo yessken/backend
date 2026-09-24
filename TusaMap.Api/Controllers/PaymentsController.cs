@@ -32,9 +32,12 @@ public class PaymentsController : ControllerBase
                 System.Text.Encoding.UTF8.GetBytes(expected)))
             return Unauthorized();
 
+        var existing = _tickets.GetByPaymentReference(request.PaymentReference);
+        if (existing is null) return NotFound();
+        if (existing.PaymentStatus == "paid") return Ok(new WebhookResponse(existing.Id, existing.PaymentStatus, existing.QrCode));
+
         var ticket = _tickets.MarkPaid(request.PaymentReference);
-        if (ticket is not null)
-            await _telegramBot.SendTicketAsync(ticket);
+        if (ticket is not null) await _telegramBot.SendTicketAsync(ticket);
         return ticket is null
             ? NotFound()
             : Ok(new WebhookResponse(ticket.Id, ticket.PaymentStatus, ticket.QrCode));
