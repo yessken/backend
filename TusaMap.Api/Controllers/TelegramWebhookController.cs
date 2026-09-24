@@ -3,6 +3,9 @@ using System.Text;
 using System.Text.Json.Serialization;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using TusaMap.Api.Data;
+using TusaMap.Api.Models;
 using TusaMap.Api.Services;
 
 namespace TusaMap.Api.Controllers;
@@ -15,13 +18,21 @@ public class TelegramWebhookController : ControllerBase
     private readonly IHttpClientFactory _clients;
     private readonly ITicketsStore _tickets;
     private readonly ITelegramBotService _telegramBot;
+    private readonly IEventsStore _events;
+    private readonly ITicketPricingService _pricing;
+    private readonly TusaMapDbContext _db;
+    private readonly IUserStore _users;
 
-    public TelegramWebhookController(IConfiguration configuration, IHttpClientFactory clients, ITicketsStore tickets, ITelegramBotService telegramBot)
+    public TelegramWebhookController(IConfiguration configuration, IHttpClientFactory clients, ITicketsStore tickets, ITelegramBotService telegramBot, IEventsStore events, ITicketPricingService pricing, TusaMapDbContext db, IUserStore users)
     {
         _configuration = configuration;
         _clients = clients;
         _tickets = tickets;
         _telegramBot = telegramBot;
+        _events = events;
+        _pricing = pricing;
+        _db = db;
+        _users = users;
     }
 
     [HttpPost("webhook")]
@@ -30,6 +41,11 @@ public class TelegramWebhookController : ControllerBase
         if (!IsValidSecret(Request.Headers["X-Telegram-Bot-Api-Secret-Token"].ToString())) return Unauthorized();
         var token = _configuration["Telegram:BotToken"];
         if (string.IsNullOrWhiteSpace(token)) return StatusCode(503);
+
+        var message = update.Message;
+        var text = message?.Text?.Trim() ?? "";
+        if (message?.From is not null && text.StartsWith("/start event_", StringComparison.OrdinalIgnoreCase))
+            await StartEventPaymentAsync(token, message, text[13..].Trim(), cancellationToken);
 
         if (update.PreCheckoutQuery is not null)
         {
@@ -52,6 +68,80 @@ public class TelegramWebhookController : ControllerBase
         return Ok();
     }
 
+    private async Task StartEventPaymentAsync(string token, TelegramMessage message, string eventId, CancellationToken cancellationToken)
+    {
+        var userId = message.From!.Id;
+        _users.Upsert(message.From);
+        var ev = _events.GetById(eventId);
+        var category = ev?.TicketCategories.FirstOrDefault(x => x.IsActive && x.Capacity > x.Sold);
+        var starsPerKzt = _configuration.GetValue<decimal>("Payments:TelegramStarsPerKzt");
+        if (ev is null || category is null)
+        {
+            await SendMessageAsync(token, message.Chat.Id, "Событие не найдено или билеты закончились.", cancellationToken);
+            return;
+        }
+        if (starsPerKzt <= 0)
+        {
+            await SendMessageAsync(token, message.Chat.Id, "Оплата Telegram Stars ещё не настроена.", cancellationToken);
+            return;
+        }
+
+        var draft = _pricing.Quote(ev.Id, category.Id, 1, null, userId, out var error);
+        if (draft is null)
+        {
+            await SendMessageAsync(token, message.Chat.Id, error ?? "Не удалось рассчитать стоимость.", cancellationToken);
+            return;
+        }
+
+        var stars = Math.Max(1, (int)Math.Round(draft.TotalAmount * starsPerKzt, MidpointRounding.AwayFromZero));
+        using var transaction = _db.Database.BeginTransaction();
+        var reserved = _db.Database.ExecuteSqlInterpolated($"UPDATE TicketCategories SET Sold = Sold + {draft.Quantity} WHERE Id = {draft.Category.Id} AND IsActive = 1 AND Capacity - Sold >= {draft.Quantity}");
+        if (reserved != 1)
+        {
+            await SendMessageAsync(token, message.Chat.Id, "Этот билет только что закончился.", cancellationToken);
+            return;
+        }
+        var ticket = _tickets.Add(new Ticket
+        {
+            EventId = ev.Id,
+            EventTitle = ev.Title,
+            EventDate = ev.Date,
+            EventPlace = ev.Place,
+            PaymentMethod = "telegram",
+            PaymentStatus = "pending",
+            PaymentReference = Guid.NewGuid().ToString("N"),
+            TicketCategoryId = draft.Category.Id,
+            TicketCategoryName = draft.Category.Name,
+            Quantity = draft.Quantity,
+            BaseAmount = draft.BaseAmount,
+            DiscountAmount = draft.DiscountAmount,
+            CommissionAmount = draft.CommissionAmount,
+            TotalAmount = draft.TotalAmount,
+        }, userId);
+        var response = await _clients.CreateClient().PostAsJsonAsync($"https://api.telegram.org/bot{token}/sendInvoice", new
+        {
+            chat_id = message.Chat.Id,
+            title = ev.Title,
+            description = $"{ev.Date} · {ev.Place} · {draft.Category.Name}",
+            payload = ticket.PaymentReference,
+            provider_token = "",
+            currency = "XTR",
+            prices = new[] { new { label = draft.Category.Name, amount = stars } },
+        }, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            transaction.Rollback();
+            await SendMessageAsync(token, message.Chat.Id, "Не удалось открыть оплату Telegram. Попробуйте позже.", cancellationToken);
+            return;
+        }
+        transaction.Commit();
+    }
+
+    private async Task SendMessageAsync(string token, long chatId, string text, CancellationToken cancellationToken)
+    {
+        await _clients.CreateClient().PostAsJsonAsync($"https://api.telegram.org/bot{token}/sendMessage", new { chat_id = chatId, text }, cancellationToken);
+    }
+
     private bool IsValidSecret(string actual)
     {
         var expected = _configuration["Telegram:WebhookSecret"];
@@ -67,7 +157,15 @@ public sealed class TelegramUpdate
 
 public sealed class TelegramMessage
 {
+    [JsonPropertyName("from")] public TelegramUser? From { get; set; }
+    [JsonPropertyName("chat")] public TelegramChat Chat { get; set; } = new();
+    [JsonPropertyName("text")] public string? Text { get; set; }
     [JsonPropertyName("successful_payment")] public TelegramSuccessfulPayment? SuccessfulPayment { get; set; }
+}
+
+public sealed class TelegramChat
+{
+    [JsonPropertyName("id")] public long Id { get; set; }
 }
 
 public sealed class TelegramSuccessfulPayment
