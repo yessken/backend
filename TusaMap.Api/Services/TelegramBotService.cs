@@ -6,6 +6,7 @@ namespace TusaMap.Api.Services;
 public interface ITelegramBotService
 {
     Task SendTicketAsync(Ticket ticket, CancellationToken cancellationToken = default);
+    Task ConfigureWebAppAsync(CancellationToken cancellationToken = default);
 }
 
 public class TelegramBotService : ITelegramBotService
@@ -33,5 +34,26 @@ public class TelegramBotService : ITelegramBotService
             cancellationToken);
         if (!response.IsSuccessStatusCode)
             _logger.LogWarning("Telegram ticket delivery failed for ticket {TicketId}: {StatusCode}", ticket.Id, response.StatusCode);
+    }
+
+    public async Task ConfigureWebAppAsync(CancellationToken cancellationToken = default)
+    {
+        var token = _configuration["Telegram:BotToken"];
+        var webAppUrl = _configuration["Telegram:WebAppUrl"];
+        if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(webAppUrl)) return;
+
+        var response = await _clients.CreateClient().PostAsJsonAsync(
+            $"https://api.telegram.org/bot{token}/setChatMenuButton",
+            new
+            {
+                menu_button = new
+                {
+                    type = "web_app",
+                    text = "Открыть TUSA",
+                    web_app = new { url = webAppUrl },
+                },
+            }, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            _logger.LogWarning("Telegram Web App menu configuration failed: {StatusCode}", response.StatusCode);
     }
 }

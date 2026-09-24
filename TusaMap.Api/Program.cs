@@ -53,6 +53,11 @@ using (var scope = app.Services.CreateScope())
     DatabaseSchema.EnsureCompatible(db);
 }
 
+using (var scope = app.Services.CreateScope())
+{
+    await scope.ServiceProvider.GetRequiredService<ITelegramBotService>().ConfigureWebAppAsync();
+}
+
 if (app.Environment.IsDevelopment())
     app.UseSwagger().UseSwaggerUI();
 
