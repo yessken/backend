@@ -4,6 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>TusaMap.Api-development</UserSecretsId>
     <RootNamespace>TusaMap.Api</RootNamespace>
     <AssemblyName>TusaMap.Api</AssemblyName>
   </PropertyGroup>
