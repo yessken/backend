@@ -40,6 +40,28 @@ public class AdminController : ControllerBase
         if (admin is null || !_users.IsAdmin(admin.Id)) return Forbid();
         return Ok(_db.Tickets.AsNoTracking().Where(x => x.RefundStatus == "requested").ToList());
     }
+
+    [HttpGet("tickets/by-event")]
+    public IActionResult TicketsByEvent([FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
+    {
+        var admin = _auth.ValidateInitData(initData);
+        if (admin is null || !_users.IsAdmin(admin.Id)) return Forbid();
+        var report = (from ticket in _db.Tickets.AsNoTracking()
+                      join ev in _db.Events.AsNoTracking() on ticket.EventId equals ev.Id
+                      group ticket by new { ev.Id, ev.Title } into groupByEvent
+                      orderby groupByEvent.Key.Title
+                      select new
+                      {
+                          eventId = groupByEvent.Key.Id,
+                          eventTitle = groupByEvent.Key.Title,
+                          orders = groupByEvent.Count(),
+                          tickets = groupByEvent.Sum(x => x.Quantity),
+                          paid = groupByEvent.Where(x => x.PaymentStatus == "paid").Sum(x => x.Quantity),
+                          pending = groupByEvent.Where(x => x.PaymentStatus == "pending").Sum(x => x.Quantity),
+                          revenue = groupByEvent.Where(x => x.PaymentStatus == "paid").Sum(x => x.TotalAmount),
+                      }).ToList();
+        return Ok(report);
+    }
 }
 
 public record SetRoleRequest(string Role);

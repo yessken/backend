@@ -40,6 +40,21 @@ public class TicketsController : ControllerBase
         return Ok(list);
     }
 
+    [HttpGet("organizer")]
+    public ActionResult<IReadOnlyList<OrganizerOrderRow>> OrganizerOrders([FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
+    {
+        var user = _telegramAuth.ValidateInitData(initData);
+        if (user is null) return Unauthorized();
+        _users.Upsert(user);
+        var rows = (from ticket in _db.Tickets.AsNoTracking()
+                    join ev in _db.Events.AsNoTracking() on ticket.EventId equals ev.Id
+                    where ev.OrganizerTelegramId == user.Id
+                    orderby ticket.PurchasedAt descending
+                    select new OrganizerOrderRow(ticket.Id, ev.Id, ev.Title, ticket.PaymentStatus, ticket.PaymentMethod, ticket.Quantity, ticket.TotalAmount, ticket.PurchasedAt))
+            .ToList();
+        return Ok(rows);
+    }
+
     [HttpPost]
     public ActionResult<Ticket> Purchase([FromBody] PurchaseTicketRequest request, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
     {
@@ -156,3 +171,4 @@ public class QuoteTicketRequest
 }
 
 public record TicketQuoteResponse(string TicketCategoryId, string TicketCategoryName, int Quantity, decimal BaseAmount, decimal DiscountAmount, decimal CommissionAmount, decimal TotalAmount);
+public record OrganizerOrderRow(string TicketId, string EventId, string EventTitle, string PaymentStatus, string PaymentMethod, int Quantity, decimal TotalAmount, string PurchasedAt);
