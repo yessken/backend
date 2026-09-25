@@ -40,6 +40,13 @@ public static class DatabaseSchema
                 CreatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
             """);
+        CreateTable(db, "OrganizerSubscriptions", """
+            CREATE TABLE IF NOT EXISTS OrganizerSubscriptions (
+                TelegramUserId INTEGER NOT NULL PRIMARY KEY, Plan TEXT NOT NULL DEFAULT 'starter',
+                Status TEXT NOT NULL DEFAULT 'inactive', ExpiresAt TEXT NULL,
+                UpdatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """);
         CreateTable(db, "TicketCheckIns", """
             CREATE TABLE IF NOT EXISTS TicketCheckIns (
                 Id TEXT NOT NULL PRIMARY KEY, TicketId TEXT NOT NULL,

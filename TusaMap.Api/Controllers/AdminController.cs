@@ -62,6 +62,23 @@ public class AdminController : ControllerBase
                       }).ToList();
         return Ok(report);
     }
+
+    [HttpPost("organizers/{telegramUserId:long}/subscription")]
+    public IActionResult SetSubscription(long telegramUserId, [FromBody] SetSubscriptionRequest request, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
+    {
+        var admin = _auth.ValidateInitData(initData);
+        if (admin is null || !_users.IsAdmin(admin.Id)) return Forbid();
+        if (request.Status is not ("active" or "inactive")) return BadRequest("Status must be active or inactive");
+        var subscription = _db.OrganizerSubscriptions.Find(telegramUserId) ?? new Models.OrganizerSubscription { TelegramUserId = telegramUserId };
+        subscription.Plan = request.Plan;
+        subscription.Status = request.Status;
+        subscription.ExpiresAt = request.ExpiresAt;
+        subscription.UpdatedAt = DateTime.UtcNow;
+        if (_db.Entry(subscription).State == EntityState.Detached) _db.OrganizerSubscriptions.Add(subscription);
+        _db.SaveChanges();
+        return Ok(subscription);
+    }
 }
 
 public record SetRoleRequest(string Role);
+public record SetSubscriptionRequest(string Plan, string Status, DateTime? ExpiresAt);
