@@ -52,6 +52,7 @@ using (var scope = app.Services.CreateScope())
 using (var scope = app.Services.CreateScope())
 {
     await scope.ServiceProvider.GetRequiredService<ITelegramBotService>().ConfigureWebAppAsync();
+    await scope.ServiceProvider.GetRequiredService<ITelegramBotService>().ConfigureWebhookAsync();
 }
 
 if (app.Environment.IsDevelopment())

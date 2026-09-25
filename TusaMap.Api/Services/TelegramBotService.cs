@@ -7,6 +7,7 @@ public interface ITelegramBotService
 {
     Task SendTicketAsync(Ticket ticket, CancellationToken cancellationToken = default);
     Task ConfigureWebAppAsync(CancellationToken cancellationToken = default);
+    Task ConfigureWebhookAsync(CancellationToken cancellationToken = default);
 }
 
 public class TelegramBotService : ITelegramBotService
@@ -55,5 +56,24 @@ public class TelegramBotService : ITelegramBotService
             }, cancellationToken);
         if (!response.IsSuccessStatusCode)
             _logger.LogWarning("Telegram Web App menu configuration failed: {StatusCode}", response.StatusCode);
+    }
+
+    public async Task ConfigureWebhookAsync(CancellationToken cancellationToken = default)
+    {
+        var token = _configuration["Telegram:BotToken"];
+        var webhookUrl = _configuration["Telegram:WebhookUrl"];
+        var secret = _configuration["Telegram:WebhookSecret"];
+        if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(webhookUrl) || string.IsNullOrWhiteSpace(secret))
+        {
+            _logger.LogWarning("Telegram webhook is not configured: BotToken, WebhookUrl and WebhookSecret are required");
+            return;
+        }
+
+        var response = await _clients.CreateClient().PostAsJsonAsync(
+            $"https://api.telegram.org/bot{token}/setWebhook",
+            new { url = webhookUrl, secret_token = secret, allowed_updates = new[] { "message", "pre_checkout_query" } },
+            cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            _logger.LogWarning("Telegram webhook configuration failed: {StatusCode}", response.StatusCode);
     }
 }
