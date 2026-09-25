@@ -46,6 +46,9 @@ public class TicketsController : ControllerBase
         var user = _telegramAuth.ValidateInitData(initData);
         if (user is null) return Unauthorized();
         _users.Upsert(user);
+        var isAdmin = _users.IsAdmin(user.Id);
+        var subscription = _db.OrganizerSubscriptions.AsNoTracking().FirstOrDefault(x => x.TelegramUserId == user.Id);
+        if (!isAdmin && (subscription?.Status != "active" || subscription.ExpiresAt <= DateTime.UtcNow)) return Forbid();
         var rows = (from ticket in _db.Tickets.AsNoTracking()
                     join ev in _db.Events.AsNoTracking() on ticket.EventId equals ev.Id
                     where ev.OrganizerTelegramId == user.Id

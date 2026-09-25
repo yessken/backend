@@ -46,6 +46,8 @@ public class TelegramWebhookController : ControllerBase
         var text = message?.Text?.Trim() ?? "";
         if (message?.From is not null && text.StartsWith("/start event_", StringComparison.OrdinalIgnoreCase))
             await StartEventPaymentAsync(token, message, text[13..].Trim(), cancellationToken);
+        else if (message?.From is not null && text.Equals("/start subscribe_pro", StringComparison.OrdinalIgnoreCase))
+            await StartSubscriptionPaymentAsync(token, message, cancellationToken);
 
         if (update.PreCheckoutQuery is not null)
         {
@@ -57,11 +59,18 @@ public class TelegramWebhookController : ControllerBase
         var payment = update.Message?.SuccessfulPayment;
         if (payment is not null)
         {
-            var existing = _tickets.GetByPaymentReference(payment.InvoicePayload);
-            if (existing is not null && existing.PaymentStatus != "paid")
+            if (payment.InvoicePayload.StartsWith("subscription:", StringComparison.OrdinalIgnoreCase))
             {
-                var ticket = _tickets.MarkPaid(payment.InvoicePayload);
-                if (ticket is not null) await _telegramBot.SendTicketAsync(ticket, cancellationToken);
+                await ActivateSubscriptionAsync(token, update.Message!.Chat.Id, payment.InvoicePayload, cancellationToken);
+            }
+            else
+            {
+                var existing = _tickets.GetByPaymentReference(payment.InvoicePayload);
+                if (existing is not null && existing.PaymentStatus != "paid")
+                {
+                    var ticket = _tickets.MarkPaid(payment.InvoicePayload);
+                    if (ticket is not null) await _telegramBot.SendTicketAsync(ticket, cancellationToken);
+                }
             }
         }
 
@@ -135,6 +144,44 @@ public class TelegramWebhookController : ControllerBase
             return;
         }
         transaction.Commit();
+    }
+
+    private async Task StartSubscriptionPaymentAsync(string token, TelegramMessage message, CancellationToken cancellationToken)
+    {
+        var stars = _configuration.GetValue<int>("Payments:TelegramSubscriptionStars");
+        if (stars <= 0)
+        {
+            await SendMessageAsync(token, message.Chat.Id, "Подписка организатора пока не настроена.", cancellationToken);
+            return;
+        }
+
+        var payload = $"subscription:{message.From!.Id}:pro";
+        var response = await _clients.CreateClient().PostAsJsonAsync($"https://api.telegram.org/bot{token}/sendInvoice", new
+        {
+            chat_id = message.Chat.Id,
+            title = "TUSA Organizer Pro",
+            description = "Доступ к заказам, аналитике и инструментам организатора на 30 дней.",
+            payload,
+            provider_token = "",
+            currency = "XTR",
+            prices = new[] { new { label = "Organizer Pro · 30 дней", amount = stars } },
+        }, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            await SendMessageAsync(token, message.Chat.Id, "Не удалось открыть оплату подписки. Попробуйте позже.", cancellationToken);
+    }
+
+    private async Task ActivateSubscriptionAsync(string token, long chatId, string payload, CancellationToken cancellationToken)
+    {
+        var parts = payload.Split(':', StringSplitOptions.TrimEntries);
+        if (parts.Length != 3 || !long.TryParse(parts[1], out var userId) || parts[2] != "pro") return;
+        var subscription = _db.OrganizerSubscriptions.Find(userId) ?? new OrganizerSubscription { TelegramUserId = userId };
+        subscription.Plan = "pro";
+        subscription.Status = "active";
+        subscription.ExpiresAt = DateTime.UtcNow.AddDays(30);
+        subscription.UpdatedAt = DateTime.UtcNow;
+        if (_db.Entry(subscription).State == EntityState.Detached) _db.OrganizerSubscriptions.Add(subscription);
+        _db.SaveChanges();
+        await SendMessageAsync(token, chatId, "Подписка Organizer Pro активирована на 30 дней.", cancellationToken);
     }
 
     private async Task SendMessageAsync(string token, long chatId, string text, CancellationToken cancellationToken)

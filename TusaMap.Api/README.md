@@ -52,6 +52,7 @@ dotnet run --project .\TusaMap.Api\TusaMap.Api.csproj
 - `POST /api/tickets/quote` — проверить цену, категорию, лимит и промокод до создания заказа
 - `POST /api/payments/webhook` — подтвердить оплату секретным webhook-запросом; после этого создаётся QR-код
 - `POST /api/telegram/webhook` — Telegram updates, включая web deep-link `/start event_{eventId}` and Stars payments
+- `/start subscribe_pro` — opens the Organizer Pro subscription invoice when `Payments__TelegramSubscriptionStars` is configured
 
 Для production задай:
 
@@ -60,6 +61,7 @@ dotnet run --project .\TusaMap.Api\TusaMap.Api.csproj
 - `Telegram__AdminUserIds__0` — Telegram ID администратора;
 - `Payments__WebhookSecret` — секрет платёжного webhook;
 - `Payments__TelegramStarsPerKzt` — conversion rate used for Telegram Stars invoices; set explicitly before enabling payments (for example, `0` keeps payment disabled);
+- `Payments__TelegramSubscriptionStars` — fixed Telegram Stars price for 30 days of Organizer Pro (keep `0` until the price is decided);
 - `Telegram__WebhookSecret` — secret used when registering the Telegram webhook;
 - `Cors__Origins__0` — разрешённый frontend origin.
 
