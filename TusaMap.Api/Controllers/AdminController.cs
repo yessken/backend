@@ -63,6 +63,24 @@ public class AdminController : ControllerBase
         return Ok(report);
     }
 
+    [HttpGet("sales-summary")]
+    public IActionResult SalesSummary([FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
+    {
+        var admin = _auth.ValidateInitData(initData);
+        if (admin is null || !_users.IsAdmin(admin.Id)) return Forbid();
+        var tickets = _db.Tickets.AsNoTracking();
+        return Ok(new
+        {
+            totalOrders = tickets.Count(),
+            totalTickets = tickets.Sum(x => (int?)x.Quantity) ?? 0,
+            paidOrders = tickets.Count(x => x.PaymentStatus == "paid"),
+            pendingOrders = tickets.Count(x => x.PaymentStatus == "pending"),
+            paidRevenue = tickets.Where(x => x.PaymentStatus == "paid").Sum(x => (decimal?)x.TotalAmount) ?? 0,
+            requestedRefunds = tickets.Count(x => x.RefundStatus == "requested"),
+            activeEvents = _db.Events.Count(x => x.Status == "approved"),
+        });
+    }
+
     [HttpPost("organizers/{telegramUserId:long}/subscription")]
     public IActionResult SetSubscription(long telegramUserId, [FromBody] SetSubscriptionRequest request, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
     {
