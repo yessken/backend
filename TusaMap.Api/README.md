@@ -62,6 +62,7 @@ dotnet run --project .\TusaMap.Api\TusaMap.Api.csproj
 - `Payments__WebhookSecret` — секрет платёжного webhook;
 - `Payments__TelegramStarsPerKzt` — conversion rate used for Telegram Stars invoices; set explicitly before enabling payments (for example, `0` keeps payment disabled);
 - `Payments__TelegramSubscriptionStars` — fixed Telegram Stars price for 30 days of Organizer Pro (keep `0` until the price is decided);
+- `Payments__TelegramTestMode` — when `true` in Development, event invoices cost exactly 1 Star for testing; keep `false` in production;
 - `Telegram__WebhookSecret` — secret used when registering the Telegram webhook;
 - `Cors__Origins__0` — разрешённый frontend origin.
 
