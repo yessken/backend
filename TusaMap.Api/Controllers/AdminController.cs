@@ -24,7 +24,7 @@ public class AdminController : ControllerBase
     public IActionResult SetRole(long telegramUserId, [FromBody] SetRoleRequest request, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
     {
         var admin = _auth.ValidateInitData(initData);
-        if (admin is null || !_users.IsAdmin(admin.Id)) return Forbid();
+        if (admin is null || !_users.IsAdmin(admin.Id)) return StatusCode(StatusCodes.Status403Forbidden);
         if (request.Role is not ("user" or "organizer" or "checker" or "admin")) return BadRequest("Unknown role");
         var target = _db.Users.FirstOrDefault(x => x.TelegramUserId == telegramUserId);
         if (target is null) return NotFound();
@@ -37,7 +37,7 @@ public class AdminController : ControllerBase
     public IActionResult Refunds([FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
     {
         var admin = _auth.ValidateInitData(initData);
-        if (admin is null || !_users.IsAdmin(admin.Id)) return Forbid();
+        if (admin is null || !_users.IsAdmin(admin.Id)) return StatusCode(StatusCodes.Status403Forbidden);
         return Ok(_db.Tickets.AsNoTracking().Where(x => x.RefundStatus == "requested").ToList());
     }
 
@@ -45,7 +45,7 @@ public class AdminController : ControllerBase
     public IActionResult TicketsByEvent([FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
     {
         var admin = _auth.ValidateInitData(initData);
-        if (admin is null || !_users.IsAdmin(admin.Id)) return Forbid();
+        if (admin is null || !_users.IsAdmin(admin.Id)) return StatusCode(StatusCodes.Status403Forbidden);
         var report = (from ticket in _db.Tickets.AsNoTracking()
                       join ev in _db.Events.AsNoTracking() on ticket.EventId equals ev.Id
                       group ticket by new { ev.Id, ev.Title } into groupByEvent
@@ -67,7 +67,7 @@ public class AdminController : ControllerBase
     public IActionResult SalesSummary([FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
     {
         var admin = _auth.ValidateInitData(initData);
-        if (admin is null || !_users.IsAdmin(admin.Id)) return Forbid();
+        if (admin is null || !_users.IsAdmin(admin.Id)) return StatusCode(StatusCodes.Status403Forbidden);
         var tickets = _db.Tickets.AsNoTracking();
         return Ok(new
         {
