@@ -7,6 +7,11 @@ public static class DatabaseSchema
 {
     public static void EnsureCompatible(TusaMapDbContext db)
     {
+        if (db.Database.IsNpgsql())
+        {
+            EnsurePostgresCompatible(db);
+            return;
+        }
         if (!db.Database.IsSqlite()) return;
         var connection = db.Database.GetDbConnection();
         if (connection.State != ConnectionState.Open) connection.Open();
@@ -63,6 +68,8 @@ public static class DatabaseSchema
         AddColumnIfMissing(db, "Tickets", "PaymentStatus", "TEXT NOT NULL DEFAULT 'pending'");
         AddColumnIfMissing(db, "Tickets", "TelegramUserId", "INTEGER NOT NULL DEFAULT 0");
         AddColumnIfMissing(db, "Tickets", "PaymentReference", "TEXT NULL");
+        AddColumnIfMissing(db, "Tickets", "TelegramStarsAmount", "INTEGER NULL");
+        AddColumnIfMissing(db, "Tickets", "TelegramPaymentChargeId", "TEXT NULL");
         AddColumnIfMissing(db, "Tickets", "TicketCategoryId", "TEXT NOT NULL DEFAULT ''");
         AddColumnIfMissing(db, "Tickets", "TicketCategoryName", "TEXT NOT NULL DEFAULT ''");
         AddColumnIfMissing(db, "Tickets", "Quantity", "INTEGER NOT NULL DEFAULT 1");
@@ -73,11 +80,31 @@ public static class DatabaseSchema
         AddColumnIfMissing(db, "Tickets", "PromoCode", "TEXT NULL");
         AddColumnIfMissing(db, "Tickets", "RefundStatus", "TEXT NOT NULL DEFAULT 'none'");
         AddColumnIfMissing(db, "Tickets", "CancelledAt", "TEXT NULL");
+        AddColumnIfMissing(db, "OrganizerSubscriptions", "LastTelegramChargeId", "TEXT NULL");
 
         db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_PromoCodes_Code ON PromoCodes (Code)");
         db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_PromoRedemptions_Code_User ON PromoRedemptions (PromoCodeId, TelegramUserId)");
         db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_FunnelEvents_Name_Event_Ref ON FunnelEvents (Name, EventId, Ref)");
         db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_TicketCheckIns_TicketId ON TicketCheckIns (TicketId)");
+        db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_Tickets_TelegramPaymentChargeId ON Tickets (TelegramPaymentChargeId)");
+    }
+
+    private static void EnsurePostgresCompatible(TusaMapDbContext db)
+    {
+        db.Database.ExecuteSqlRaw("""
+            CREATE TABLE IF NOT EXISTS "OrganizerSubscriptions" (
+                "TelegramUserId" BIGINT PRIMARY KEY,
+                "Plan" TEXT NOT NULL DEFAULT 'starter',
+                "Status" TEXT NOT NULL DEFAULT 'inactive',
+                "ExpiresAt" TIMESTAMPTZ NULL,
+                "UpdatedAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                "LastTelegramChargeId" TEXT NULL
+            )
+            """);
+        db.Database.ExecuteSqlRaw("ALTER TABLE \"Tickets\" ADD COLUMN IF NOT EXISTS \"TelegramStarsAmount\" INTEGER NULL");
+        db.Database.ExecuteSqlRaw("ALTER TABLE \"Tickets\" ADD COLUMN IF NOT EXISTS \"TelegramPaymentChargeId\" TEXT NULL");
+        db.Database.ExecuteSqlRaw("ALTER TABLE \"OrganizerSubscriptions\" ADD COLUMN IF NOT EXISTS \"LastTelegramChargeId\" TEXT NULL");
+        db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Tickets_TelegramPaymentChargeId\" ON \"Tickets\" (\"TelegramPaymentChargeId\")");
     }
 
     private static void CreateTable(TusaMapDbContext db, string _, string sql) => db.Database.ExecuteSqlRaw(sql);

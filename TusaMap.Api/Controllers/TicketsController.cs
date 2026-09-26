@@ -48,7 +48,7 @@ public class TicketsController : ControllerBase
         _users.Upsert(user);
         var isAdmin = _users.IsAdmin(user.Id);
         var subscription = _db.OrganizerSubscriptions.AsNoTracking().FirstOrDefault(x => x.TelegramUserId == user.Id);
-        if (!isAdmin && (subscription?.Status != "active" || subscription.ExpiresAt <= DateTime.UtcNow)) return Forbid();
+        if (!isAdmin && (subscription?.Status != "active" || subscription.ExpiresAt <= DateTime.UtcNow)) return StatusCode(StatusCodes.Status403Forbidden);
         var rows = (from ticket in _db.Tickets.AsNoTracking()
                     join ev in _db.Events.AsNoTracking() on ticket.EventId equals ev.Id
                     where ev.OrganizerTelegramId == user.Id
@@ -69,9 +69,9 @@ public class TicketsController : ControllerBase
     }
 
     [HttpPost("public")]
-    public ActionResult<Ticket> PurchasePublic([FromBody] PurchaseTicketRequest request)
+    public IActionResult PurchasePublic()
     {
-        return CreateOrder(request, 0);
+        return StatusCode(StatusCodes.Status410Gone, new { message = "Public ticket orders are disabled. Continue checkout in the Telegram bot." });
     }
 
     private ActionResult<Ticket> CreateOrder(PurchaseTicketRequest request, long userId)

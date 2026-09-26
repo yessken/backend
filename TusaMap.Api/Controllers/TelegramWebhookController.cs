@@ -51,24 +51,33 @@ public class TelegramWebhookController : ControllerBase
 
         if (update.PreCheckoutQuery is not null)
         {
+            var query = update.PreCheckoutQuery;
+            var valid = query.From is not null && IsValidInvoice(query.InvoicePayload, query.Currency, query.TotalAmount, query.From.Id);
+            var answer = valid
+                ? new { pre_checkout_query_id = query.Id, ok = true, error_message = (string?)null }
+                : new { pre_checkout_query_id = query.Id, ok = false, error_message = (string?)"Заказ не найден, истёк или сумма изменилась. Создайте заказ заново." };
             await _clients.CreateClient().PostAsJsonAsync(
                 $"https://api.telegram.org/bot{token}/answerPreCheckoutQuery",
-                new { pre_checkout_query_id = update.PreCheckoutQuery.Id, ok = true }, cancellationToken);
+                answer, cancellationToken);
         }
 
         var payment = update.Message?.SuccessfulPayment;
         if (payment is not null)
         {
+            var payerId = update.Message!.From?.Id ?? 0;
             if (payment.InvoicePayload.StartsWith("subscription:", StringComparison.OrdinalIgnoreCase))
             {
-                await ActivateSubscriptionAsync(token, update.Message!.Chat.Id, payment.InvoicePayload, cancellationToken);
+                if (IsValidInvoice(payment.InvoicePayload, payment.Currency, payment.TotalAmount, payerId))
+                    await ActivateSubscriptionAsync(token, update.Message.Chat.Id, payment.InvoicePayload, payment.TelegramPaymentChargeId, cancellationToken);
             }
             else
             {
                 var existing = _tickets.GetByPaymentReference(payment.InvoicePayload);
-                if (existing is not null && existing.PaymentStatus != "paid")
+                if (existing?.PaymentStatus == "paid" && existing.TelegramPaymentChargeId == payment.TelegramPaymentChargeId)
+                    return Ok();
+                if (existing is not null && IsValidInvoice(payment.InvoicePayload, payment.Currency, payment.TotalAmount, payerId))
                 {
-                    var ticket = _tickets.MarkPaid(payment.InvoicePayload);
+                    var ticket = _tickets.MarkPaid(payment.InvoicePayload, payment.TelegramPaymentChargeId);
                     if (ticket is not null) await _telegramBot.SendTicketAsync(ticket, cancellationToken);
                 }
             }
@@ -120,6 +129,7 @@ public class TelegramWebhookController : ControllerBase
             PaymentMethod = "telegram",
             PaymentStatus = "pending",
             PaymentReference = Guid.NewGuid().ToString("N"),
+            TelegramStarsAmount = stars,
             TicketCategoryId = draft.Category.Id,
             TicketCategoryName = draft.Category.Name,
             Quantity = draft.Quantity,
@@ -156,7 +166,7 @@ public class TelegramWebhookController : ControllerBase
             return;
         }
 
-        var payload = $"subscription:{message.From!.Id}:pro";
+        var payload = $"subscription:{message.From!.Id}:pro:{stars}";
         var response = await _clients.CreateClient().PostAsJsonAsync($"https://api.telegram.org/bot{token}/sendInvoice", new
         {
             chat_id = message.Chat.Id,
@@ -171,18 +181,37 @@ public class TelegramWebhookController : ControllerBase
             await SendMessageAsync(token, message.Chat.Id, "Не удалось открыть оплату подписки. Попробуйте позже.", cancellationToken);
     }
 
-    private async Task ActivateSubscriptionAsync(string token, long chatId, string payload, CancellationToken cancellationToken)
+    private async Task ActivateSubscriptionAsync(string token, long chatId, string payload, string chargeId, CancellationToken cancellationToken)
     {
         var parts = payload.Split(':', StringSplitOptions.TrimEntries);
-        if (parts.Length != 3 || !long.TryParse(parts[1], out var userId) || parts[2] != "pro") return;
+        if (parts.Length != 4 || !long.TryParse(parts[1], out var userId) || parts[2] != "pro") return;
         var subscription = _db.OrganizerSubscriptions.Find(userId) ?? new OrganizerSubscription { TelegramUserId = userId };
+        if (subscription.LastTelegramChargeId == chargeId) return;
         subscription.Plan = "pro";
         subscription.Status = "active";
-        subscription.ExpiresAt = DateTime.UtcNow.AddDays(30);
+        var now = DateTime.UtcNow;
+        subscription.ExpiresAt = (subscription.ExpiresAt is { } expiry && expiry > now ? expiry : now).AddDays(30);
         subscription.UpdatedAt = DateTime.UtcNow;
+        subscription.LastTelegramChargeId = chargeId;
         if (_db.Entry(subscription).State == EntityState.Detached) _db.OrganizerSubscriptions.Add(subscription);
         _db.SaveChanges();
         await SendMessageAsync(token, chatId, "Подписка Organizer Pro активирована на 30 дней.", cancellationToken);
+    }
+
+    private bool IsValidInvoice(string payload, string currency, int totalAmount, long payerId)
+    {
+        if (!string.Equals(currency, "XTR", StringComparison.Ordinal)) return false;
+        if (payload.StartsWith("subscription:", StringComparison.OrdinalIgnoreCase))
+        {
+            var parts = payload.Split(':', StringSplitOptions.TrimEntries);
+            return parts.Length == 4 && long.TryParse(parts[1], out var subscriptionUserId) && subscriptionUserId == payerId &&
+                   parts[2] == "pro" && int.TryParse(parts[3], out var invoiceStars) && invoiceStars > 0 && totalAmount == invoiceStars;
+        }
+
+        var ticket = _tickets.GetByPaymentReference(payload);
+        return ticket is not null && ticket.PaymentStatus == "pending" && ticket.CancelledAt is null &&
+               ticket.PaymentMethod == "telegram" && ticket.TelegramUserId == payerId &&
+               ticket.TelegramStarsAmount == totalAmount;
     }
 
     private async Task SendMessageAsync(string token, long chatId, string text, CancellationToken cancellationToken)
@@ -219,9 +248,16 @@ public sealed class TelegramChat
 public sealed class TelegramSuccessfulPayment
 {
     [JsonPropertyName("invoice_payload")] public string InvoicePayload { get; set; } = "";
+    [JsonPropertyName("currency")] public string Currency { get; set; } = "";
+    [JsonPropertyName("total_amount")] public int TotalAmount { get; set; }
+    [JsonPropertyName("telegram_payment_charge_id")] public string TelegramPaymentChargeId { get; set; } = "";
 }
 
 public sealed class TelegramPreCheckoutQuery
 {
     [JsonPropertyName("id")] public string Id { get; set; } = "";
+    [JsonPropertyName("invoice_payload")] public string InvoicePayload { get; set; } = "";
+    [JsonPropertyName("currency")] public string Currency { get; set; } = "";
+    [JsonPropertyName("total_amount")] public int TotalAmount { get; set; }
+    [JsonPropertyName("from")] public TelegramUser? From { get; set; }
 }

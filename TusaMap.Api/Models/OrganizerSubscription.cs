@@ -6,5 +6,6 @@ public class OrganizerSubscription
     public string Plan { get; set; } = "starter";
     public string Status { get; set; } = "inactive";
     public DateTime? ExpiresAt { get; set; }
+    public string? LastTelegramChargeId { get; set; }
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

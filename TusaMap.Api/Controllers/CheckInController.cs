@@ -27,7 +27,7 @@ public class CheckInController : ControllerBase
         var user = _auth.ValidateInitData(initData);
         if (user is null) return Unauthorized();
         var operatorUser = _users.Get(user.Id);
-        if (operatorUser?.Role is not ("admin" or "checker")) return Forbid();
+        if (operatorUser?.Role is not ("admin" or "checker")) return StatusCode(StatusCodes.Status403Forbidden);
 
         var ticket = _db.Tickets.Include(x => x.CheckIn).FirstOrDefault(x => x.QrCode == request.QrCode);
         if (ticket is null) return NotFound(new { message = "Билет не найден" });

@@ -97,7 +97,7 @@ public class EventsController : ControllerBase
     public ActionResult<IEnumerable<EventItem>> Pending([FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
     {
         var user = _telegramAuth.ValidateInitData(initData);
-        if (user is null || !_users.IsAdmin(user.Id)) return Forbid();
+        if (user is null || !_users.IsAdmin(user.Id)) return StatusCode(StatusCodes.Status403Forbidden);
         return Ok(_store.GetPending());
     }
 
@@ -105,7 +105,7 @@ public class EventsController : ControllerBase
     public ActionResult<EventItem> Approve(string id, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
     {
         var user = _telegramAuth.ValidateInitData(initData);
-        if (user is null || !_users.IsAdmin(user.Id)) return Forbid();
+        if (user is null || !_users.IsAdmin(user.Id)) return StatusCode(StatusCodes.Status403Forbidden);
         var approved = _store.Approve(id);
         return approved is null ? NotFound() : Ok(approved);
     }

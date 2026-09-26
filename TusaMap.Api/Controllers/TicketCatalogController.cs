@@ -27,7 +27,7 @@ public class TicketCatalogController : ControllerBase
         var user = _auth.ValidateInitData(initData);
         var ev = _db.Events.Find(eventId);
         if (user is null || ev is null) return Unauthorized();
-        if (ev.OrganizerTelegramId != user.Id && !_users.IsAdmin(user.Id)) return Forbid();
+        if (ev.OrganizerTelegramId != user.Id && !_users.IsAdmin(user.Id)) return StatusCode(StatusCodes.Status403Forbidden);
         var category = new TicketCategory { EventId = eventId, Name = request.Name.Trim(), Description = request.Description ?? "", Price = request.Price, Capacity = request.Capacity };
         _db.TicketCategories.Add(category);
         _db.SaveChanges();
@@ -40,7 +40,7 @@ public class TicketCatalogController : ControllerBase
         var user = _auth.ValidateInitData(initData);
         var ev = _db.Events.Find(eventId);
         if (user is null || ev is null) return Unauthorized();
-        if (ev.OrganizerTelegramId != user.Id && !_users.IsAdmin(user.Id)) return Forbid();
+        if (ev.OrganizerTelegramId != user.Id && !_users.IsAdmin(user.Id)) return StatusCode(StatusCodes.Status403Forbidden);
         if (request.DiscountType is not ("percent" or "fixed")) return BadRequest("DiscountType must be percent or fixed");
         if (request.DiscountType == "percent" && request.Value > 100) return BadRequest("Percent discount cannot exceed 100");
         var promo = new PromoCode { EventId = eventId, Code = request.Code.Trim().ToUpperInvariant(), DiscountType = request.DiscountType, Value = request.Value, MaxUses = request.MaxUses, PerUserLimit = request.PerUserLimit, StartsAt = request.StartsAt, ExpiresAt = request.ExpiresAt };

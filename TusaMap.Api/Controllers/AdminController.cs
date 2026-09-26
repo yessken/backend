@@ -85,7 +85,7 @@ public class AdminController : ControllerBase
     public IActionResult SetSubscription(long telegramUserId, [FromBody] SetSubscriptionRequest request, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
     {
         var admin = _auth.ValidateInitData(initData);
-        if (admin is null || !_users.IsAdmin(admin.Id)) return Forbid();
+        if (admin is null || !_users.IsAdmin(admin.Id)) return StatusCode(StatusCodes.Status403Forbidden);
         if (request.Status is not ("active" or "inactive")) return BadRequest("Status must be active or inactive");
         var subscription = _db.OrganizerSubscriptions.Find(telegramUserId) ?? new Models.OrganizerSubscription { TelegramUserId = telegramUserId };
         subscription.Plan = request.Plan;
