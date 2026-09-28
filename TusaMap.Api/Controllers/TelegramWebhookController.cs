@@ -78,7 +78,11 @@ public class TelegramWebhookController : ControllerBase
                 if (existing is not null && IsValidInvoice(payment.InvoicePayload, payment.Currency, payment.TotalAmount, payerId))
                 {
                     var ticket = _tickets.MarkPaid(payment.InvoicePayload, payment.TelegramPaymentChargeId);
-                    if (ticket is not null) await _telegramBot.SendTicketAsync(ticket, cancellationToken);
+                    if (ticket is not null)
+                    {
+                        await _telegramBot.SendTicketAsync(ticket, cancellationToken);
+                        await _telegramBot.NotifyAdminsOfTicketSaleAsync(ticket, cancellationToken);
+                    }
                 }
             }
         }
@@ -198,6 +202,7 @@ public class TelegramWebhookController : ControllerBase
         if (_db.Entry(subscription).State == EntityState.Detached) _db.OrganizerSubscriptions.Add(subscription);
         _db.SaveChanges();
         await SendMessageAsync(token, chatId, "Подписка Organizer Pro активирована на 30 дней.", cancellationToken);
+        await _telegramBot.NotifyAdminsOfSubscriptionAsync(userId, int.Parse(parts[3]), cancellationToken);
     }
 
     private bool IsValidInvoice(string payload, string currency, int totalAmount, long payerId)
