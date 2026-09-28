@@ -19,9 +19,6 @@ public static class Tusa2026EventSeeder
         if (!DateTimeOffset.TryParse($"{date}T{time}:00+05:00", CultureInfo.InvariantCulture, DateTimeStyles.None, out var startAt))
             throw new InvalidOperationException("Events:Tusa2026:Date/Time must be a valid Astana local date/time.");
 
-        var starsPrice = configuration.GetValue("Events:Tusa2026:StarsPrice", 500);
-        if (starsPrice < 1) throw new InvalidOperationException("Events:Tusa2026:StarsPrice must be at least 1.");
-
         var ev = db.Events.Include(x => x.TicketCategories).FirstOrDefault(x => x.Id == EventId);
         if (ev is null)
         {
@@ -41,7 +38,13 @@ public static class Tusa2026EventSeeder
         ev.Lat = 51.1694;
         ev.Lng = 71.4494;
         ev.Category = "вечеринка";
-        ev.Price = null;
+        var ticketPriceKzt = configuration.GetValue<decimal>("Events:Tusa2026:TicketPriceKzt");
+        var physicalProviderToken = configuration["Payments:TelegramPhysicalProviderToken"];
+        var canSellTickets = startAt > DateTimeOffset.UtcNow && ticketPriceKzt > 0 &&
+                             !string.IsNullOrWhiteSpace(physicalProviderToken);
+        ev.Price = canSellTickets
+            ? Math.Round(ticketPriceKzt * 1.10m, 2, MidpointRounding.AwayFromZero)
+            : null;
         ev.ImageUrl = configuration["Events:Tusa2026:ImageUrl"] ?? "https://picsum.photos/900/600?random=2026";
         ev.OrganizerName = "TUSA";
         ev.OrganizerTelegramId = 0;
@@ -54,13 +57,12 @@ public static class Tusa2026EventSeeder
             category = new TicketCategory { Id = TicketCategoryId, EventId = EventId, Name = "Вход", Capacity = configuration.GetValue("Events:Tusa2026:Capacity", 100) };
             db.TicketCategories.Add(category);
         }
-        category.TelegramStarsPrice = starsPrice;
-        category.Price = 0;
-        category.IsActive = startAt > DateTimeOffset.UtcNow;
+        category.Price = Math.Max(0, ticketPriceKzt);
+        category.IsActive = canSellTickets;
         category.Capacity = Math.Max(category.Capacity, category.Sold);
-        category.Description = category.IsActive
-            ? $"{starsPrice} Telegram Stars. Адрес придёт покупателям за 24 часа до события."
-            : "Продажи закрыты.";
+        category.Description = canSellTickets
+            ? "Оплата в тенге через Telegram и подключённого платёжного провайдера. Итог включает комиссию TUSA 10%."
+            : "Продажи откроются после настройки платёжного провайдера и цены в тенге.";
 
         db.SaveChanges();
     }

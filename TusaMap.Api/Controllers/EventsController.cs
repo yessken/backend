@@ -41,33 +41,6 @@ public class EventsController : ControllerBase
         return Ok(e);
     }
 
-    [HttpGet("{id}/interest")]
-    public IActionResult Interest(string id, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
-    {
-        if (_store.GetById(id) is null) return NotFound();
-        var user = _telegramAuth.ValidateInitData(initData);
-        var count = _db.EventInterests.Count(x => x.EventId == id);
-        var interested = user is not null && _db.EventInterests.Any(x => x.EventId == id && x.TelegramUserId == user.Id);
-        return Ok(new { count, interested });
-    }
-
-    [HttpPost("{id}/interest")]
-    public IActionResult MarkInterested(string id, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
-    {
-        var user = _telegramAuth.ValidateInitData(initData);
-        if (user is null) return Unauthorized("Откройте TUSA через Telegram, чтобы отметить интерес.");
-        _users.Upsert(user);
-        if (_store.GetById(id) is null) return NotFound();
-
-        if (!_db.EventInterests.Any(x => x.EventId == id && x.TelegramUserId == user.Id))
-        {
-            _db.EventInterests.Add(new Models.EventInterest { EventId = id, TelegramUserId = user.Id });
-            _db.SaveChanges();
-        }
-
-        return Ok(new { count = _db.EventInterests.Count(x => x.EventId == id), interested = true });
-    }
-
     [HttpPost]
     public ActionResult<EventItem> Create([FromBody] CreateEventRequest req, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
     {
@@ -113,7 +86,6 @@ public class EventsController : ControllerBase
                 Name = category.Name,
                 Description = category.Description ?? "",
                 Price = category.Price,
-                TelegramStarsPrice = category.TelegramStarsPrice,
                 Capacity = category.Capacity,
             }));
             _db.SaveChanges();
@@ -125,7 +97,7 @@ public class EventsController : ControllerBase
     public ActionResult<IEnumerable<EventItem>> Pending([FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
     {
         var user = _telegramAuth.ValidateInitData(initData);
-        if (user is null || !_users.IsAdmin(user.Id)) return StatusCode(StatusCodes.Status403Forbidden);
+        if (user is null || !_users.IsAdmin(user.Id)) return Forbid();
         return Ok(_store.GetPending());
     }
 
@@ -133,7 +105,7 @@ public class EventsController : ControllerBase
     public ActionResult<EventItem> Approve(string id, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
     {
         var user = _telegramAuth.ValidateInitData(initData);
-        if (user is null || !_users.IsAdmin(user.Id)) return StatusCode(StatusCodes.Status403Forbidden);
+        if (user is null || !_users.IsAdmin(user.Id)) return Forbid();
         var approved = _store.Approve(id);
         return approved is null ? NotFound() : Ok(approved);
     }
@@ -170,7 +142,6 @@ public class CreateTicketCategoryRequest
 {
     [Required, StringLength(80, MinimumLength = 2)] public string Name { get; set; } = "";
     [Range(0, 100000000)] public decimal Price { get; set; }
-    [Range(0, 1000000)] public int TelegramStarsPrice { get; set; }
     [Range(1, 1000000)] public int Capacity { get; set; }
     [StringLength(300)] public string? Description { get; set; }
 }

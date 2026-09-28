@@ -17,8 +17,9 @@ public class TicketsController : ControllerBase
     private readonly IUserStore _users;
     private readonly ITicketPricingService _pricing;
     private readonly TusaMapDbContext _db;
+    private readonly ITelegramBotService _telegramBot;
 
-    public TicketsController(ITicketsStore ticketsStore, IEventsStore eventsStore, ITelegramAuthService telegramAuth, IUserStore users, ITicketPricingService pricing, TusaMapDbContext db)
+    public TicketsController(ITicketsStore ticketsStore, IEventsStore eventsStore, ITelegramAuthService telegramAuth, IUserStore users, ITicketPricingService pricing, TusaMapDbContext db, ITelegramBotService telegramBot)
     {
         _ticketsStore = ticketsStore;
         _eventsStore = eventsStore;
@@ -26,6 +27,7 @@ public class TicketsController : ControllerBase
         _users = users;
         _pricing = pricing;
         _db = db;
+        _telegramBot = telegramBot;
     }
 
     [HttpGet("me")]
@@ -48,7 +50,7 @@ public class TicketsController : ControllerBase
         _users.Upsert(user);
         var isAdmin = _users.IsAdmin(user.Id);
         var subscription = _db.OrganizerSubscriptions.AsNoTracking().FirstOrDefault(x => x.TelegramUserId == user.Id);
-        if (!isAdmin && (subscription?.Status != "active" || subscription.ExpiresAt <= DateTime.UtcNow)) return StatusCode(StatusCodes.Status403Forbidden);
+        if (!isAdmin && (subscription?.Status != "active" || subscription.ExpiresAt <= DateTime.UtcNow)) return Forbid();
         var rows = (from ticket in _db.Tickets.AsNoTracking()
                     join ev in _db.Events.AsNoTracking() on ticket.EventId equals ev.Id
                     where ev.OrganizerTelegramId == user.Id
@@ -69,61 +71,19 @@ public class TicketsController : ControllerBase
     }
 
     [HttpPost("public")]
-    public IActionResult PurchasePublic()
+    public ActionResult<Ticket> PurchasePublic([FromBody] PurchaseTicketRequest request)
     {
-        return StatusCode(StatusCodes.Status410Gone, new { message = "Public ticket orders are disabled. Continue checkout in the Telegram bot." });
+        return CreateOrder(request, 0);
     }
 
     private ActionResult<Ticket> CreateOrder(PurchaseTicketRequest request, long userId)
     {
-
-        var ev = _eventsStore.GetById(request.EventId);
-        if (ev == null)
+        if (_eventsStore.GetById(request.EventId) is null)
             return NotFound("Event not found");
-
-        if (request.PaymentMethod is not ("kaspi" or "telegram"))
-            return BadRequest("PaymentMethod must be kaspi or telegram");
-
-        var draft = _pricing.Quote(request.EventId, request.TicketCategoryId, request.Quantity, request.PromoCode, userId, out var error);
-        if (draft is null) return BadRequest(error);
-
-        using var transaction = _db.Database.BeginTransaction();
-        var reserved = _db.Database.ExecuteSqlInterpolated($"UPDATE TicketCategories SET Sold = Sold + {draft.Quantity} WHERE Id = {draft.Category.Id} AND IsActive = 1 AND Capacity - Sold >= {draft.Quantity}");
-        if (reserved != 1)
-        {
-            transaction.Rollback();
-            return Conflict("Tickets are no longer available");
-        }
-        var category = _db.TicketCategories.First(x => x.Id == draft.Category.Id);
-
-        var ticket = new Ticket
-        {
-            EventId = ev.Id,
-            EventTitle = ev.Title,
-            EventDate = ev.Date,
-            EventPlace = ev.Place,
-            PaymentMethod = request.PaymentMethod,
-            PaymentStatus = "pending",
-            PaymentReference = Guid.NewGuid().ToString("N"),
-            TicketCategoryId = draft.Category.Id,
-            TicketCategoryName = draft.Category.Name,
-            Quantity = draft.Quantity,
-            BaseAmount = draft.BaseAmount,
-            DiscountAmount = draft.DiscountAmount,
-            CommissionAmount = draft.CommissionAmount,
-            TotalAmount = draft.TotalAmount,
-            PromoCode = draft.Promo?.Code
-        };
-        var created = _ticketsStore.Add(ticket, userId);
-        if (draft.Promo is not null)
-        {
-            draft.Promo.UsedCount++;
-            if (userId != 0)
-                _db.PromoRedemptions.Add(new Models.PromoRedemption { PromoCodeId = draft.Promo.Id, TelegramUserId = userId, TicketId = created.Id });
-            _db.SaveChanges();
-        }
-        transaction.Commit();
-        return StatusCode(StatusCodes.Status202Accepted, created);
+        if (request.PaymentMethod != "telegram_provider")
+            return BadRequest("Выберите официальный Telegram-счёт; Telegram Stars и прямые Kaspi-заказы для офлайн-входа отключены.");
+        return StatusCode(StatusCodes.Status503ServiceUnavailable,
+            "Создание неоплаченного заказа через API отключено. Оформите билет через официальный Telegram-счёт события.");
     }
 
     [HttpPost("quote")]
@@ -138,7 +98,7 @@ public class TicketsController : ControllerBase
     }
 
     [HttpPost("{id}/cancel")]
-    public IActionResult Cancel(string id, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
+    public async Task<IActionResult> Cancel(string id, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData, CancellationToken cancellationToken)
     {
         var user = _telegramAuth.ValidateInitData(initData);
         if (user is null) return Unauthorized();
@@ -147,7 +107,24 @@ public class TicketsController : ControllerBase
         if (ticket.CancelledAt is not null) return Conflict("Ticket is already cancelled");
         ticket.CancelledAt = DateTime.UtcNow;
         ticket.RefundStatus = ticket.PaymentStatus == "paid" ? "requested" : "not_required";
-        _db.SaveChanges();
+        if (ticket.PaymentStatus == "paid" && ticket.PaymentMethod == "telegram" && !string.IsNullOrWhiteSpace(ticket.TelegramPaymentChargeId))
+        {
+            var refunded = await _telegramBot.RefundStarPaymentAsync(user.Id, ticket.TelegramPaymentChargeId, cancellationToken);
+            ticket.PaymentStatus = refunded ? "refunded" : "refund_requested";
+            ticket.RefundStatus = refunded ? "refunded" : "requested";
+        }
+        if (ticket.PaymentStatus == "paid" && ticket.PaymentMethod == "telegram_provider")
+            await _telegramBot.NotifyAdminsOfPaymentSupportAsync(user.Id,
+                $"Запрошена отмена KZT-билета. Заказ: {ticket.Id}; provider charge: {ticket.ProviderPaymentChargeId ?? "не указан"}. Возврат нужно выполнить у провайдера.",
+                cancellationToken);
+        if (ticket.PaymentStatus is "pending" or "checkout")
+        {
+            ticket.PaymentStatus = "expired";
+            await _db.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE TicketCategories SET Sold = CASE WHEN Sold >= {ticket.Quantity} THEN Sold - {ticket.Quantity} ELSE 0 END WHERE Id = {ticket.TicketCategoryId}",
+                cancellationToken);
+        }
+        await _db.SaveChangesAsync(cancellationToken);
         return Ok(new { ticket.Id, ticket.RefundStatus, ticket.CancelledAt });
     }
 }

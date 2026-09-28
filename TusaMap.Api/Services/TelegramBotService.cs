@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text.Json;
 using TusaMap.Api.Models;
 
 namespace TusaMap.Api.Services;
@@ -8,7 +9,9 @@ public interface ITelegramBotService
     Task SendTicketAsync(Ticket ticket, CancellationToken cancellationToken = default);
     Task NotifyAdminsOfTicketSaleAsync(Ticket ticket, CancellationToken cancellationToken = default);
     Task NotifyAdminsOfSubscriptionAsync(long telegramUserId, int stars, CancellationToken cancellationToken = default);
+    Task<bool> NotifyAdminsOfPaymentSupportAsync(long telegramUserId, string details, CancellationToken cancellationToken = default);
     Task<bool> SendPrivateVenueAddressAsync(long telegramUserId, string eventTitle, string address, string date, string time, CancellationToken cancellationToken = default);
+    Task<bool> RefundStarPaymentAsync(long telegramUserId, string chargeId, CancellationToken cancellationToken = default);
     Task ConfigureWebAppAsync(CancellationToken cancellationToken = default);
     Task ConfigureWebhookAsync(CancellationToken cancellationToken = default);
 }
@@ -41,15 +44,32 @@ public class TelegramBotService : ITelegramBotService
     }
 
     public Task NotifyAdminsOfTicketSaleAsync(Ticket ticket, CancellationToken cancellationToken = default)
-    {
-        var message = $"Новая оплата TUSA\nСобытие: {ticket.EventTitle}\nБилеты: {ticket.Quantity}\nСумма: {ticket.TotalAmount:N0} ₸ / {ticket.TelegramStarsAmount ?? 0} ⭐\nTicket ID: {ticket.Id}";
-        return NotifyAdminsAsync(message, cancellationToken);
-    }
+        => NotifyAdminsAsync($"Новая оплата TUSA\nСобытие: {ticket.EventTitle}\nБилеты: {ticket.Quantity}\nСумма: {ticket.TotalAmount:N0} ₸\nTicket ID: {ticket.Id}", cancellationToken);
 
     public Task NotifyAdminsOfSubscriptionAsync(long telegramUserId, int stars, CancellationToken cancellationToken = default)
+        => NotifyAdminsAsync($"Новая оплата Organizer Pro\nTelegram ID: {telegramUserId}\nСумма: {stars} ⭐\nСрок: 30 дней", cancellationToken);
+
+    public async Task<bool> NotifyAdminsOfPaymentSupportAsync(long telegramUserId, string details, CancellationToken cancellationToken = default)
     {
-        var message = $"Новая оплата Organizer Pro\nTelegram ID: {telegramUserId}\nСумма: {stars} ⭐\nСрок: 30 дней";
-        return NotifyAdminsAsync(message, cancellationToken);
+        var token = _configuration["Telegram:BotToken"];
+        var adminIds = _configuration.GetSection("Telegram:AdminUserIds").Get<long[]>() ?? [];
+        if (string.IsNullOrWhiteSpace(token) || adminIds.Length == 0) return false;
+        var delivered = false;
+        foreach (var adminId in adminIds.Distinct())
+        {
+            try
+            {
+                var response = await _clients.CreateClient().PostAsJsonAsync(
+                    $"https://api.telegram.org/bot{token}/sendMessage",
+                    new { chat_id = adminId, text = $"Запрос /paysupport\nTelegram ID: {telegramUserId}\nСообщение: {details}" }, cancellationToken);
+                delivered |= response.IsSuccessStatusCode;
+            }
+            catch (HttpRequestException exception)
+            {
+                _logger.LogWarning(exception, "Payment support notification failed for admin {AdminId}", adminId);
+            }
+        }
+        return delivered;
     }
 
     private async Task NotifyAdminsAsync(string text, CancellationToken cancellationToken)
@@ -66,11 +86,11 @@ public class TelegramBotService : ITelegramBotService
                     $"https://api.telegram.org/bot{token}/sendMessage",
                     new { chat_id = adminId, text }, cancellationToken);
                 if (!response.IsSuccessStatusCode)
-                    _logger.LogWarning("Admin payment notification failed for admin {AdminId}: {StatusCode}", adminId, response.StatusCode);
+                    _logger.LogWarning("Admin notification failed for admin {AdminId}: {StatusCode}", adminId, response.StatusCode);
             }
             catch (HttpRequestException exception)
             {
-                _logger.LogWarning(exception, "Admin payment notification transport failed for admin {AdminId}", adminId);
+                _logger.LogWarning(exception, "Admin notification transport failed for admin {AdminId}", adminId);
             }
         }
     }
@@ -86,6 +106,23 @@ public class TelegramBotService : ITelegramBotService
         if (!response.IsSuccessStatusCode)
             _logger.LogWarning("Private venue delivery failed for Telegram user {TelegramUserId}: {StatusCode}", telegramUserId, response.StatusCode);
         return response.IsSuccessStatusCode;
+    }
+
+    public async Task<bool> RefundStarPaymentAsync(long telegramUserId, string chargeId, CancellationToken cancellationToken = default)
+    {
+        var token = _configuration["Telegram:BotToken"];
+        if (string.IsNullOrWhiteSpace(token) || telegramUserId == 0 || string.IsNullOrWhiteSpace(chargeId)) return false;
+        var response = await _clients.CreateClient().PostAsJsonAsync(
+            $"https://api.telegram.org/bot{token}/refundStarPayment",
+            new { user_id = telegramUserId, telegram_payment_charge_id = chargeId }, cancellationToken);
+        var body = response.IsSuccessStatusCode
+            ? await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken)
+            : default;
+        var refunded = response.IsSuccessStatusCode && body.ValueKind == JsonValueKind.Object &&
+                       body.TryGetProperty("ok", out var ok) && ok.ValueKind == JsonValueKind.True;
+        if (!refunded)
+            _logger.LogWarning("Stars refund failed for Telegram user {TelegramUserId}: {StatusCode}", telegramUserId, response.StatusCode);
+        return refunded;
     }
 
     public async Task ConfigureWebAppAsync(CancellationToken cancellationToken = default)
@@ -122,9 +159,23 @@ public class TelegramBotService : ITelegramBotService
 
         var response = await _clients.CreateClient().PostAsJsonAsync(
             $"https://api.telegram.org/bot{token}/setWebhook",
-            new { url = webhookUrl, secret_token = secret, allowed_updates = new[] { "message", "pre_checkout_query" } },
+            new { url = webhookUrl, secret_token = secret, allowed_updates = new[] { "message", "pre_checkout_query", "callback_query" } },
             cancellationToken);
         if (!response.IsSuccessStatusCode)
             _logger.LogWarning("Telegram webhook configuration failed: {StatusCode}", response.StatusCode);
+
+        var commandsResponse = await _clients.CreateClient().PostAsJsonAsync(
+            $"https://api.telegram.org/bot{token}/setMyCommands",
+            new
+            {
+                commands = new[]
+                {
+                    new { command = "terms", description = "Условия сервиса и покупки" },
+                    new { command = "paysupport", description = "Помощь с оплатой и возвратом" },
+                    new { command = "start", description = "Открыть TUSA" },
+                }
+            }, cancellationToken);
+        if (!commandsResponse.IsSuccessStatusCode)
+            _logger.LogWarning("Telegram bot command configuration failed: {StatusCode}", commandsResponse.StatusCode);
     }
 }

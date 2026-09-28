@@ -25,6 +25,7 @@ public class TusaMapDbContext : DbContext
         modelBuilder.Entity<EventItem>().Property(x => x.Price).HasPrecision(12, 2);
         modelBuilder.Entity<Ticket>().HasIndex(x => x.PaymentReference).IsUnique();
         modelBuilder.Entity<Ticket>().HasIndex(x => x.TelegramPaymentChargeId).IsUnique();
+        modelBuilder.Entity<Ticket>().HasIndex(x => x.ProviderPaymentChargeId).IsUnique();
         modelBuilder.Entity<Ticket>().HasIndex(x => new { x.TelegramUserId, x.EventId });
         modelBuilder.Entity<TicketCategory>().HasKey(x => x.Id);
         modelBuilder.Entity<EventItem>()

@@ -20,7 +20,6 @@ public static class DatabaseSchema
             CREATE TABLE IF NOT EXISTS TicketCategories (
                 Id TEXT NOT NULL PRIMARY KEY, EventId TEXT NOT NULL, Name TEXT NOT NULL,
                 Description TEXT NOT NULL DEFAULT '', Price TEXT NOT NULL DEFAULT '0',
-                TelegramStarsPrice INTEGER NOT NULL DEFAULT 0,
                 Capacity INTEGER NOT NULL DEFAULT 0, Sold INTEGER NOT NULL DEFAULT 0,
                 IsActive INTEGER NOT NULL DEFAULT 1, CreatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
@@ -42,7 +41,7 @@ public static class DatabaseSchema
         CreateTable(db, "FunnelEvents", """
             CREATE TABLE IF NOT EXISTS FunnelEvents (
                 Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, Name TEXT NOT NULL,
-                EventId TEXT NULL, Ref TEXT NULL, VisitorId TEXT NULL, TelegramUserId INTEGER NULL,
+                EventId TEXT NULL, Ref TEXT NULL, TelegramUserId INTEGER NULL,
                 CreatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
             """);
@@ -57,7 +56,8 @@ public static class DatabaseSchema
             CREATE TABLE IF NOT EXISTS OrganizerSubscriptions (
                 TelegramUserId INTEGER NOT NULL PRIMARY KEY, Plan TEXT NOT NULL DEFAULT 'starter',
                 Status TEXT NOT NULL DEFAULT 'inactive', ExpiresAt TEXT NULL,
-                UpdatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                UpdatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                LastTelegramChargeId TEXT NULL, TermsAcceptedAt TEXT NULL, TermsVersion TEXT NULL
             )
             """);
         CreateTable(db, "TicketCheckIns", """
@@ -76,14 +76,16 @@ public static class DatabaseSchema
         AddColumnIfMissing(db, "Events", "AddressRevealAt", "TEXT NULL");
         AddColumnIfMissing(db, "Events", "PrivateAddress", "TEXT NOT NULL DEFAULT ''");
         AddColumnIfMissing(db, "Events", "IsDemo", "INTEGER NOT NULL DEFAULT 0");
-        AddColumnIfMissing(db, "TicketCategories", "TelegramStarsPrice", "INTEGER NOT NULL DEFAULT 0");
         AddColumnIfMissing(db, "Tickets", "PaymentMethod", "TEXT NOT NULL DEFAULT ''");
         AddColumnIfMissing(db, "Tickets", "PaymentStatus", "TEXT NOT NULL DEFAULT 'pending'");
         AddColumnIfMissing(db, "Tickets", "TelegramUserId", "INTEGER NOT NULL DEFAULT 0");
         AddColumnIfMissing(db, "Tickets", "PaymentReference", "TEXT NULL");
-        AddColumnIfMissing(db, "Tickets", "TelegramStarsAmount", "INTEGER NULL");
         AddColumnIfMissing(db, "Tickets", "TelegramPaymentChargeId", "TEXT NULL");
+        AddColumnIfMissing(db, "Tickets", "ProviderPaymentChargeId", "TEXT NULL");
         AddColumnIfMissing(db, "Tickets", "PrivateAddressSentAt", "TEXT NULL");
+        AddColumnIfMissing(db, "Tickets", "TermsAcceptedAt", "TEXT NULL");
+        AddColumnIfMissing(db, "Tickets", "TermsVersion", "TEXT NULL");
+        AddColumnIfMissing(db, "Tickets", "PaymentCheckoutAt", "TEXT NULL");
         AddColumnIfMissing(db, "Tickets", "TicketCategoryId", "TEXT NOT NULL DEFAULT ''");
         AddColumnIfMissing(db, "Tickets", "TicketCategoryName", "TEXT NOT NULL DEFAULT ''");
         AddColumnIfMissing(db, "Tickets", "Quantity", "INTEGER NOT NULL DEFAULT 1");
@@ -96,6 +98,8 @@ public static class DatabaseSchema
         AddColumnIfMissing(db, "Tickets", "CancelledAt", "TEXT NULL");
         AddColumnIfMissing(db, "FunnelEvents", "VisitorId", "TEXT NULL");
         AddColumnIfMissing(db, "OrganizerSubscriptions", "LastTelegramChargeId", "TEXT NULL");
+        AddColumnIfMissing(db, "OrganizerSubscriptions", "TermsAcceptedAt", "TEXT NULL");
+        AddColumnIfMissing(db, "OrganizerSubscriptions", "TermsVersion", "TEXT NULL");
 
         db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_PromoCodes_Code ON PromoCodes (Code)");
         db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_PromoRedemptions_Code_User ON PromoRedemptions (PromoCodeId, TelegramUserId)");
@@ -103,6 +107,7 @@ public static class DatabaseSchema
         db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_TicketCheckIns_TicketId ON TicketCheckIns (TicketId)");
         db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_EventInterests_EventId ON EventInterests (EventId)");
         db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_Tickets_TelegramPaymentChargeId ON Tickets (TelegramPaymentChargeId)");
+        db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_Tickets_ProviderPaymentChargeId ON Tickets (ProviderPaymentChargeId)");
         db.Database.ExecuteSqlRaw("UPDATE Events SET IsDemo = 1 WHERE Id IN ('1','2','3','4') AND OrganizerTelegramId = 0");
     }
 
@@ -115,22 +120,29 @@ public static class DatabaseSchema
                 "Status" TEXT NOT NULL DEFAULT 'inactive',
                 "ExpiresAt" TIMESTAMPTZ NULL,
                 "UpdatedAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                "LastTelegramChargeId" TEXT NULL
+                "LastTelegramChargeId" TEXT NULL,
+                "TermsAcceptedAt" TIMESTAMPTZ NULL,
+                "TermsVersion" TEXT NULL
             )
             """);
-        db.Database.ExecuteSqlRaw("ALTER TABLE \"Tickets\" ADD COLUMN IF NOT EXISTS \"TelegramStarsAmount\" INTEGER NULL");
         db.Database.ExecuteSqlRaw("ALTER TABLE \"Tickets\" ADD COLUMN IF NOT EXISTS \"TelegramPaymentChargeId\" TEXT NULL");
+        db.Database.ExecuteSqlRaw("ALTER TABLE \"Tickets\" ADD COLUMN IF NOT EXISTS \"ProviderPaymentChargeId\" TEXT NULL");
         db.Database.ExecuteSqlRaw("ALTER TABLE \"Tickets\" ADD COLUMN IF NOT EXISTS \"PrivateAddressSentAt\" TIMESTAMPTZ NULL");
+        db.Database.ExecuteSqlRaw("ALTER TABLE \"Tickets\" ADD COLUMN IF NOT EXISTS \"TermsAcceptedAt\" TIMESTAMPTZ NULL");
+        db.Database.ExecuteSqlRaw("ALTER TABLE \"Tickets\" ADD COLUMN IF NOT EXISTS \"TermsVersion\" TEXT NULL");
+        db.Database.ExecuteSqlRaw("ALTER TABLE \"Tickets\" ADD COLUMN IF NOT EXISTS \"PaymentCheckoutAt\" TIMESTAMPTZ NULL");
+        db.Database.ExecuteSqlRaw("ALTER TABLE \"OrganizerSubscriptions\" ADD COLUMN IF NOT EXISTS \"LastTelegramChargeId\" TEXT NULL");
+        db.Database.ExecuteSqlRaw("ALTER TABLE \"OrganizerSubscriptions\" ADD COLUMN IF NOT EXISTS \"TermsAcceptedAt\" TIMESTAMPTZ NULL");
+        db.Database.ExecuteSqlRaw("ALTER TABLE \"OrganizerSubscriptions\" ADD COLUMN IF NOT EXISTS \"TermsVersion\" TEXT NULL");
         db.Database.ExecuteSqlRaw("ALTER TABLE \"Events\" ADD COLUMN IF NOT EXISTS \"AddressIsPrivate\" BOOLEAN NOT NULL DEFAULT FALSE");
         db.Database.ExecuteSqlRaw("ALTER TABLE \"Events\" ADD COLUMN IF NOT EXISTS \"AddressRevealAt\" TIMESTAMPTZ NULL");
         db.Database.ExecuteSqlRaw("ALTER TABLE \"Events\" ADD COLUMN IF NOT EXISTS \"PrivateAddress\" TEXT NOT NULL DEFAULT ''");
         db.Database.ExecuteSqlRaw("ALTER TABLE \"Events\" ADD COLUMN IF NOT EXISTS \"IsDemo\" BOOLEAN NOT NULL DEFAULT FALSE");
-        db.Database.ExecuteSqlRaw("ALTER TABLE \"TicketCategories\" ADD COLUMN IF NOT EXISTS \"TelegramStarsPrice\" INTEGER NOT NULL DEFAULT 0");
         db.Database.ExecuteSqlRaw("ALTER TABLE \"FunnelEvents\" ADD COLUMN IF NOT EXISTS \"VisitorId\" TEXT NULL");
         db.Database.ExecuteSqlRaw("CREATE TABLE IF NOT EXISTS \"EventInterests\" (\"EventId\" TEXT NOT NULL, \"TelegramUserId\" BIGINT NOT NULL, \"CreatedAt\" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (\"EventId\", \"TelegramUserId\"))");
         db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS \"IX_EventInterests_EventId\" ON \"EventInterests\" (\"EventId\")");
-        db.Database.ExecuteSqlRaw("ALTER TABLE \"OrganizerSubscriptions\" ADD COLUMN IF NOT EXISTS \"LastTelegramChargeId\" TEXT NULL");
         db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Tickets_TelegramPaymentChargeId\" ON \"Tickets\" (\"TelegramPaymentChargeId\")");
+        db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Tickets_ProviderPaymentChargeId\" ON \"Tickets\" (\"ProviderPaymentChargeId\")");
         db.Database.ExecuteSqlRaw("UPDATE \"Events\" SET \"IsDemo\" = TRUE WHERE \"Id\" IN ('1','2','3','4') AND \"OrganizerTelegramId\" = 0");
     }
 

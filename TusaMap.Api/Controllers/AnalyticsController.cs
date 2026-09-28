@@ -26,7 +26,8 @@ public class AnalyticsController : ControllerBase
     public IActionResult Track([FromBody] TrackEventRequest request, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
     {
         if (!AllowedEvents.Contains(request.Name, StringComparer.Ordinal)) return BadRequest("Unknown analytics event");
-        _db.FunnelEvents.Add(new Models.FunnelEvent { Name = request.Name, EventId = request.EventId, Ref = request.Ref, VisitorId = request.VisitorId });
+        var user = _auth.ValidateInitData(initData);
+        _db.FunnelEvents.Add(new Models.FunnelEvent { Name = request.Name, EventId = request.EventId, Ref = request.Ref, TelegramUserId = user?.Id });
         _db.SaveChanges();
         return NoContent();
     }
@@ -35,7 +36,7 @@ public class AnalyticsController : ControllerBase
     public IActionResult Summary([FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
     {
         var user = _auth.ValidateInitData(initData);
-        if (user is null || !_users.IsAdmin(user.Id)) return StatusCode(StatusCodes.Status403Forbidden);
+        if (user is null || !_users.IsAdmin(user.Id)) return Forbid();
         var summary = _db.FunnelEvents.AsNoTracking().GroupBy(x => x.Name).Select(group => new { name = group.Key, count = group.Count() }).ToList();
         return Ok(summary);
     }
@@ -46,5 +47,4 @@ public class TrackEventRequest
     [Required, StringLength(40)] public string Name { get; set; } = "";
     [StringLength(80)] public string? EventId { get; set; }
     [StringLength(120)] public string? Ref { get; set; }
-    [StringLength(64)] public string? VisitorId { get; set; }
 }
