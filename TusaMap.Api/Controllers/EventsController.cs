@@ -41,6 +41,33 @@ public class EventsController : ControllerBase
         return Ok(e);
     }
 
+    [HttpGet("{id}/interest")]
+    public IActionResult Interest(string id, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
+    {
+        if (_store.GetById(id) is null) return NotFound();
+        var user = _telegramAuth.ValidateInitData(initData);
+        var count = _db.EventInterests.Count(x => x.EventId == id);
+        var interested = user is not null && _db.EventInterests.Any(x => x.EventId == id && x.TelegramUserId == user.Id);
+        return Ok(new { count, interested });
+    }
+
+    [HttpPost("{id}/interest")]
+    public IActionResult MarkInterested(string id, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
+    {
+        var user = _telegramAuth.ValidateInitData(initData);
+        if (user is null) return Unauthorized("Откройте TUSA через Telegram, чтобы отметить интерес.");
+        _users.Upsert(user);
+        if (_store.GetById(id) is null) return NotFound();
+
+        if (!_db.EventInterests.Any(x => x.EventId == id && x.TelegramUserId == user.Id))
+        {
+            _db.EventInterests.Add(new Models.EventInterest { EventId = id, TelegramUserId = user.Id });
+            _db.SaveChanges();
+        }
+
+        return Ok(new { count = _db.EventInterests.Count(x => x.EventId == id), interested = true });
+    }
+
     [HttpPost]
     public ActionResult<EventItem> Create([FromBody] CreateEventRequest req, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
     {

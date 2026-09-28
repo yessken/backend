@@ -81,6 +81,26 @@ public class AdminController : ControllerBase
         });
     }
 
+    [HttpGet("events/{eventId}/engagement")]
+    public IActionResult EventEngagement(string eventId, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
+    {
+        var admin = _auth.ValidateInitData(initData);
+        if (admin is null || !_users.IsAdmin(admin.Id)) return StatusCode(StatusCodes.Status403Forbidden);
+        var views = _db.FunnelEvents.AsNoTracking().Where(x => x.Name == "event_open" && x.EventId == eventId)
+            .Select(x => new { x.TelegramUserId, x.VisitorId }).ToList();
+        var uniqueVisitors = views
+            .Select(x => x.TelegramUserId is not null ? $"tg:{x.TelegramUserId}" : string.IsNullOrWhiteSpace(x.VisitorId) ? null : $"web:{x.VisitorId}")
+            .Where(x => x is not null).Distinct().Count();
+        return Ok(new
+        {
+            eventId,
+            views = views.Count,
+            uniqueVisitors,
+            interested = _db.EventInterests.Count(x => x.EventId == eventId),
+            paidTickets = _db.Tickets.Where(x => x.EventId == eventId && x.PaymentStatus == "paid").Sum(x => (int?)x.Quantity) ?? 0,
+        });
+    }
+
     [HttpPost("organizers/{telegramUserId:long}/subscription")]
     public IActionResult SetSubscription(long telegramUserId, [FromBody] SetSubscriptionRequest request, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
     {

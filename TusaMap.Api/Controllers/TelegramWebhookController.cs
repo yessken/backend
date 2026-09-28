@@ -46,6 +46,8 @@ public class TelegramWebhookController : ControllerBase
         var text = message?.Text?.Trim() ?? "";
         if (message?.From is not null && text.StartsWith("/start event_", StringComparison.OrdinalIgnoreCase))
             await StartEventPaymentAsync(token, message, text[13..].Trim(), cancellationToken);
+        else if (message?.From is not null && text.StartsWith("/start interest_", StringComparison.OrdinalIgnoreCase))
+            await RegisterInterestAsync(token, message, text[16..].Trim(), cancellationToken);
         else if (message?.From is not null && text.Equals("/start subscribe_pro", StringComparison.OrdinalIgnoreCase))
             await StartSubscriptionPaymentAsync(token, message, cancellationToken);
 
@@ -185,6 +187,24 @@ public class TelegramWebhookController : ControllerBase
         }, cancellationToken);
         if (!response.IsSuccessStatusCode)
             await SendMessageAsync(token, message.Chat.Id, "Не удалось открыть оплату подписки. Попробуйте позже.", cancellationToken);
+    }
+
+    private async Task RegisterInterestAsync(string token, TelegramMessage message, string eventId, CancellationToken cancellationToken)
+    {
+        var user = message.From!;
+        _users.Upsert(user);
+        if (_events.GetById(eventId) is null)
+        {
+            await SendMessageAsync(token, message.Chat.Id, "Событие сейчас недоступно.", cancellationToken);
+            return;
+        }
+        if (!_db.EventInterests.Any(x => x.EventId == eventId && x.TelegramUserId == user.Id))
+        {
+            _db.EventInterests.Add(new EventInterest { EventId = eventId, TelegramUserId = user.Id });
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+        var count = await _db.EventInterests.CountAsync(x => x.EventId == eventId, cancellationToken);
+        await SendMessageAsync(token, message.Chat.Id, $"Отметил интерес к событию. Сейчас заинтересовались: {count}. Это не бронь и не покупка — билет можно оформить отдельно.", cancellationToken);
     }
 
     private async Task ActivateSubscriptionAsync(string token, long chatId, string payload, string chargeId, CancellationToken cancellationToken)

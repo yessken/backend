@@ -42,8 +42,15 @@ public static class DatabaseSchema
         CreateTable(db, "FunnelEvents", """
             CREATE TABLE IF NOT EXISTS FunnelEvents (
                 Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, Name TEXT NOT NULL,
-                EventId TEXT NULL, Ref TEXT NULL, TelegramUserId INTEGER NULL,
+                EventId TEXT NULL, Ref TEXT NULL, VisitorId TEXT NULL, TelegramUserId INTEGER NULL,
                 CreatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """);
+        CreateTable(db, "EventInterests", """
+            CREATE TABLE IF NOT EXISTS EventInterests (
+                EventId TEXT NOT NULL, TelegramUserId INTEGER NOT NULL,
+                CreatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (EventId, TelegramUserId)
             )
             """);
         CreateTable(db, "OrganizerSubscriptions", """
@@ -87,12 +94,14 @@ public static class DatabaseSchema
         AddColumnIfMissing(db, "Tickets", "PromoCode", "TEXT NULL");
         AddColumnIfMissing(db, "Tickets", "RefundStatus", "TEXT NOT NULL DEFAULT 'none'");
         AddColumnIfMissing(db, "Tickets", "CancelledAt", "TEXT NULL");
+        AddColumnIfMissing(db, "FunnelEvents", "VisitorId", "TEXT NULL");
         AddColumnIfMissing(db, "OrganizerSubscriptions", "LastTelegramChargeId", "TEXT NULL");
 
         db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_PromoCodes_Code ON PromoCodes (Code)");
         db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_PromoRedemptions_Code_User ON PromoRedemptions (PromoCodeId, TelegramUserId)");
         db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_FunnelEvents_Name_Event_Ref ON FunnelEvents (Name, EventId, Ref)");
         db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_TicketCheckIns_TicketId ON TicketCheckIns (TicketId)");
+        db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_EventInterests_EventId ON EventInterests (EventId)");
         db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_Tickets_TelegramPaymentChargeId ON Tickets (TelegramPaymentChargeId)");
         db.Database.ExecuteSqlRaw("UPDATE Events SET IsDemo = 1 WHERE Id IN ('1','2','3','4') AND OrganizerTelegramId = 0");
     }
@@ -117,6 +126,9 @@ public static class DatabaseSchema
         db.Database.ExecuteSqlRaw("ALTER TABLE \"Events\" ADD COLUMN IF NOT EXISTS \"PrivateAddress\" TEXT NOT NULL DEFAULT ''");
         db.Database.ExecuteSqlRaw("ALTER TABLE \"Events\" ADD COLUMN IF NOT EXISTS \"IsDemo\" BOOLEAN NOT NULL DEFAULT FALSE");
         db.Database.ExecuteSqlRaw("ALTER TABLE \"TicketCategories\" ADD COLUMN IF NOT EXISTS \"TelegramStarsPrice\" INTEGER NOT NULL DEFAULT 0");
+        db.Database.ExecuteSqlRaw("ALTER TABLE \"FunnelEvents\" ADD COLUMN IF NOT EXISTS \"VisitorId\" TEXT NULL");
+        db.Database.ExecuteSqlRaw("CREATE TABLE IF NOT EXISTS \"EventInterests\" (\"EventId\" TEXT NOT NULL, \"TelegramUserId\" BIGINT NOT NULL, \"CreatedAt\" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (\"EventId\", \"TelegramUserId\"))");
+        db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS \"IX_EventInterests_EventId\" ON \"EventInterests\" (\"EventId\")");
         db.Database.ExecuteSqlRaw("ALTER TABLE \"OrganizerSubscriptions\" ADD COLUMN IF NOT EXISTS \"LastTelegramChargeId\" TEXT NULL");
         db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Tickets_TelegramPaymentChargeId\" ON \"Tickets\" (\"TelegramPaymentChargeId\")");
         db.Database.ExecuteSqlRaw("UPDATE \"Events\" SET \"IsDemo\" = TRUE WHERE \"Id\" IN ('1','2','3','4') AND \"OrganizerTelegramId\" = 0");
