@@ -20,6 +20,7 @@ public static class DatabaseSchema
             CREATE TABLE IF NOT EXISTS TicketCategories (
                 Id TEXT NOT NULL PRIMARY KEY, EventId TEXT NOT NULL, Name TEXT NOT NULL,
                 Description TEXT NOT NULL DEFAULT '', Price TEXT NOT NULL DEFAULT '0',
+                TelegramStarsPrice INTEGER NOT NULL DEFAULT 0,
                 Capacity INTEGER NOT NULL DEFAULT 0, Sold INTEGER NOT NULL DEFAULT 0,
                 IsActive INTEGER NOT NULL DEFAULT 1, CreatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
@@ -64,12 +65,18 @@ public static class DatabaseSchema
         AddColumnIfMissing(db, "Events", "OrganizerPhone", "TEXT NOT NULL DEFAULT ''");
         AddColumnIfMissing(db, "Events", "Status", "TEXT NOT NULL DEFAULT 'approved'");
         AddColumnIfMissing(db, "Events", "CreatedAt", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+        AddColumnIfMissing(db, "Events", "AddressIsPrivate", "INTEGER NOT NULL DEFAULT 0");
+        AddColumnIfMissing(db, "Events", "AddressRevealAt", "TEXT NULL");
+        AddColumnIfMissing(db, "Events", "PrivateAddress", "TEXT NOT NULL DEFAULT ''");
+        AddColumnIfMissing(db, "Events", "IsDemo", "INTEGER NOT NULL DEFAULT 0");
+        AddColumnIfMissing(db, "TicketCategories", "TelegramStarsPrice", "INTEGER NOT NULL DEFAULT 0");
         AddColumnIfMissing(db, "Tickets", "PaymentMethod", "TEXT NOT NULL DEFAULT ''");
         AddColumnIfMissing(db, "Tickets", "PaymentStatus", "TEXT NOT NULL DEFAULT 'pending'");
         AddColumnIfMissing(db, "Tickets", "TelegramUserId", "INTEGER NOT NULL DEFAULT 0");
         AddColumnIfMissing(db, "Tickets", "PaymentReference", "TEXT NULL");
         AddColumnIfMissing(db, "Tickets", "TelegramStarsAmount", "INTEGER NULL");
         AddColumnIfMissing(db, "Tickets", "TelegramPaymentChargeId", "TEXT NULL");
+        AddColumnIfMissing(db, "Tickets", "PrivateAddressSentAt", "TEXT NULL");
         AddColumnIfMissing(db, "Tickets", "TicketCategoryId", "TEXT NOT NULL DEFAULT ''");
         AddColumnIfMissing(db, "Tickets", "TicketCategoryName", "TEXT NOT NULL DEFAULT ''");
         AddColumnIfMissing(db, "Tickets", "Quantity", "INTEGER NOT NULL DEFAULT 1");
@@ -87,6 +94,7 @@ public static class DatabaseSchema
         db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_FunnelEvents_Name_Event_Ref ON FunnelEvents (Name, EventId, Ref)");
         db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_TicketCheckIns_TicketId ON TicketCheckIns (TicketId)");
         db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_Tickets_TelegramPaymentChargeId ON Tickets (TelegramPaymentChargeId)");
+        db.Database.ExecuteSqlRaw("UPDATE Events SET IsDemo = 1 WHERE Id IN ('1','2','3','4') AND OrganizerTelegramId = 0");
     }
 
     private static void EnsurePostgresCompatible(TusaMapDbContext db)
@@ -103,8 +111,15 @@ public static class DatabaseSchema
             """);
         db.Database.ExecuteSqlRaw("ALTER TABLE \"Tickets\" ADD COLUMN IF NOT EXISTS \"TelegramStarsAmount\" INTEGER NULL");
         db.Database.ExecuteSqlRaw("ALTER TABLE \"Tickets\" ADD COLUMN IF NOT EXISTS \"TelegramPaymentChargeId\" TEXT NULL");
+        db.Database.ExecuteSqlRaw("ALTER TABLE \"Tickets\" ADD COLUMN IF NOT EXISTS \"PrivateAddressSentAt\" TIMESTAMPTZ NULL");
+        db.Database.ExecuteSqlRaw("ALTER TABLE \"Events\" ADD COLUMN IF NOT EXISTS \"AddressIsPrivate\" BOOLEAN NOT NULL DEFAULT FALSE");
+        db.Database.ExecuteSqlRaw("ALTER TABLE \"Events\" ADD COLUMN IF NOT EXISTS \"AddressRevealAt\" TIMESTAMPTZ NULL");
+        db.Database.ExecuteSqlRaw("ALTER TABLE \"Events\" ADD COLUMN IF NOT EXISTS \"PrivateAddress\" TEXT NOT NULL DEFAULT ''");
+        db.Database.ExecuteSqlRaw("ALTER TABLE \"Events\" ADD COLUMN IF NOT EXISTS \"IsDemo\" BOOLEAN NOT NULL DEFAULT FALSE");
+        db.Database.ExecuteSqlRaw("ALTER TABLE \"TicketCategories\" ADD COLUMN IF NOT EXISTS \"TelegramStarsPrice\" INTEGER NOT NULL DEFAULT 0");
         db.Database.ExecuteSqlRaw("ALTER TABLE \"OrganizerSubscriptions\" ADD COLUMN IF NOT EXISTS \"LastTelegramChargeId\" TEXT NULL");
         db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Tickets_TelegramPaymentChargeId\" ON \"Tickets\" (\"TelegramPaymentChargeId\")");
+        db.Database.ExecuteSqlRaw("UPDATE \"Events\" SET \"IsDemo\" = TRUE WHERE \"Id\" IN ('1','2','3','4') AND \"OrganizerTelegramId\" = 0");
     }
 
     private static void CreateTable(TusaMapDbContext db, string _, string sql) => db.Database.ExecuteSqlRaw(sql);

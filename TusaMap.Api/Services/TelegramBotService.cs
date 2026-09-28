@@ -6,6 +6,7 @@ namespace TusaMap.Api.Services;
 public interface ITelegramBotService
 {
     Task SendTicketAsync(Ticket ticket, CancellationToken cancellationToken = default);
+    Task<bool> SendPrivateVenueAddressAsync(long telegramUserId, string eventTitle, string address, string date, string time, CancellationToken cancellationToken = default);
     Task ConfigureWebAppAsync(CancellationToken cancellationToken = default);
     Task ConfigureWebhookAsync(CancellationToken cancellationToken = default);
 }
@@ -35,6 +36,19 @@ public class TelegramBotService : ITelegramBotService
             cancellationToken);
         if (!response.IsSuccessStatusCode)
             _logger.LogWarning("Telegram ticket delivery failed for ticket {TicketId}: {StatusCode}", ticket.Id, response.StatusCode);
+    }
+
+    public async Task<bool> SendPrivateVenueAddressAsync(long telegramUserId, string eventTitle, string address, string date, string time, CancellationToken cancellationToken = default)
+    {
+        var token = _configuration["Telegram:BotToken"];
+        if (string.IsNullOrWhiteSpace(token) || telegramUserId == 0) return false;
+        var text = $"Адрес события TUSA 2026\n\n{eventTitle}\n{date} · {time}\n\nМесто проведения: {address}\n\nЭто сообщение отправлено только пользователям с оплаченным билетом. Покажите билет/QR на входе.";
+        var response = await _clients.CreateClient().PostAsJsonAsync(
+            $"https://api.telegram.org/bot{token}/sendMessage",
+            new { chat_id = telegramUserId, text }, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            _logger.LogWarning("Private venue delivery failed for Telegram user {TelegramUserId}: {StatusCode}", telegramUserId, response.StatusCode);
+        return response.IsSuccessStatusCode;
     }
 
     public async Task ConfigureWebAppAsync(CancellationToken cancellationToken = default)

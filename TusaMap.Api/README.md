@@ -67,3 +67,13 @@ dotnet run --project .\TusaMap.Api\TusaMap.Api.csproj
 - `Cors__Origins__0` — разрешённый frontend origin.
 
 The public web checkout deliberately does not create an anonymous order. It opens the bot with an event deep link, and the Telegram webhook creates the order only when it can create a Stars invoice. This prevents seats from being reserved by abandoned browser sessions.
+
+### TUSA 2026 private venue
+
+The launch event is configured for Friday, 2 October 2026 at 19:00 Astana time, with a 500 Stars ticket and a venue address reveal 24 hours before start. The venue address is intentionally not committed to configuration and is never included in public event API responses. On the API host, enter the final address on Thursday and restart the API:
+
+```powershell
+dotnet user-secrets set "Events:Tusa2026:PrivateAddress" "YOUR PRIVATE VENUE ADDRESS"
+```
+
+Do this before Thursday, 1 October at 19:00 Astana time. The background notifier sends the address only to paid, non-cancelled ticket holders. If the address is not configured by reveal time, the notifier keeps retrying after the address is added and the API restarts.

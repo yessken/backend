@@ -15,6 +15,7 @@ public class Ticket
     public string? PaymentReference { get; set; }
     public int? TelegramStarsAmount { get; set; }
     public string? TelegramPaymentChargeId { get; set; }
+    public DateTime? PrivateAddressSentAt { get; set; }
     public string TicketCategoryId { get; set; } = "";
     public string TicketCategoryName { get; set; } = "";
     public int Quantity { get; set; } = 1;

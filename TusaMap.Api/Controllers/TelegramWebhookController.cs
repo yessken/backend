@@ -99,7 +99,7 @@ public class TelegramWebhookController : ControllerBase
             await SendMessageAsync(token, message.Chat.Id, "Событие не найдено или билеты закончились.", cancellationToken);
             return;
         }
-        if (starsPerKzt <= 0)
+        if (category.TelegramStarsPrice <= 0 && !testMode && starsPerKzt <= 0)
         {
             await SendMessageAsync(token, message.Chat.Id, "Оплата Telegram Stars ещё не настроена.", cancellationToken);
             return;
@@ -112,7 +112,9 @@ public class TelegramWebhookController : ControllerBase
             return;
         }
 
-        var stars = testMode ? 1 : Math.Max(1, (int)Math.Round(draft.TotalAmount * starsPerKzt, MidpointRounding.AwayFromZero));
+        var stars = category.TelegramStarsPrice > 0
+            ? category.TelegramStarsPrice
+            : testMode ? 1 : Math.Max(1, (int)Math.Round(draft.TotalAmount * starsPerKzt, MidpointRounding.AwayFromZero));
         using var transaction = _db.Database.BeginTransaction();
         var reserved = _db.Database.ExecuteSqlInterpolated($"UPDATE TicketCategories SET Sold = Sold + {draft.Quantity} WHERE Id = {draft.Category.Id} AND IsActive = 1 AND Capacity - Sold >= {draft.Quantity}");
         if (reserved != 1)

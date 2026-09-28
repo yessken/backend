@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace TusaMap.Api.Models;
 
 public class EventItem
@@ -9,6 +11,11 @@ public class EventItem
     public string Time { get; set; } = "";
     public string Place { get; set; } = "";
     public string Address { get; set; } = "";
+    public bool AddressIsPrivate { get; set; }
+    public DateTime? AddressRevealAt { get; set; }
+    [JsonIgnore]
+    public string PrivateAddress { get; set; } = "";
+    public bool IsDemo { get; set; }
     public double Lat { get; set; }
     public double Lng { get; set; }
     public string Category { get; set; } = "";

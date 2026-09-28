@@ -29,6 +29,7 @@ builder.Services.AddScoped<IUserStore, UserStore>();
 builder.Services.AddScoped<ITicketPricingService, TicketPricingService>();
 builder.Services.AddSingleton<ITelegramAuthService, TelegramAuthService>();
 builder.Services.AddScoped<ITelegramBotService, TelegramBotService>();
+builder.Services.AddHostedService<PrivateVenueNotifier>();
 
 builder.Services.AddCors(options =>
 {
@@ -47,6 +48,7 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<TusaMapDbContext>();
     db.Database.EnsureCreated();
     DatabaseSchema.EnsureCompatible(db);
+    Tusa2026EventSeeder.Ensure(db, builder.Configuration);
 }
 
 using (var scope = app.Services.CreateScope())

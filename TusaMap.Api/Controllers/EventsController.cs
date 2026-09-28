@@ -86,6 +86,7 @@ public class EventsController : ControllerBase
                 Name = category.Name,
                 Description = category.Description ?? "",
                 Price = category.Price,
+                TelegramStarsPrice = category.TelegramStarsPrice,
                 Capacity = category.Capacity,
             }));
             _db.SaveChanges();
@@ -142,6 +143,7 @@ public class CreateTicketCategoryRequest
 {
     [Required, StringLength(80, MinimumLength = 2)] public string Name { get; set; } = "";
     [Range(0, 100000000)] public decimal Price { get; set; }
+    [Range(0, 1000000)] public int TelegramStarsPrice { get; set; }
     [Range(1, 1000000)] public int Capacity { get; set; }
     [StringLength(300)] public string? Description { get; set; }
 }
