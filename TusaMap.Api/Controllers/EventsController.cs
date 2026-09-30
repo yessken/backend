@@ -50,6 +50,38 @@ public class EventsController : ControllerBase
         return Ok(e);
     }
 
+    [HttpGet("{id}/going")]
+    public ActionResult<EventGoingResponse> GetGoing(string id, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
+    {
+        if (_store.GetById(id) is null) return NotFound();
+        var user = _telegramAuth.ValidateInitData(initData);
+        var goingCount = _db.EventInterests.Count(x => x.EventId == id);
+        var userGoing = user is not null && _db.EventInterests.Any(x => x.EventId == id && x.TelegramUserId == user.Id);
+        return Ok(new EventGoingResponse(goingCount, userGoing));
+    }
+
+    [HttpPost("{id}/going")]
+    public ActionResult<EventGoingResponse> ToggleGoing(string id, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
+    {
+        var user = _telegramAuth.ValidateInitData(initData);
+        if (user is null) return Unauthorized("Откройте TUSA из Telegram, чтобы отметить участие.");
+        var eventItem = _store.GetById(id);
+        if (eventItem is null) return NotFound();
+        if (eventItem.IsDemo) return BadRequest("Для демонстрационных событий отметка участия отключена.");
+
+        var interest = _db.EventInterests.Find(id, user.Id);
+        if (interest is null)
+            _db.EventInterests.Add(new EventInterest { EventId = id, TelegramUserId = user.Id });
+        else
+            _db.EventInterests.Remove(interest);
+        _db.SaveChanges();
+
+        var response = new EventGoingResponse(
+            _db.EventInterests.Count(x => x.EventId == id),
+            interest is null);
+        return Ok(response);
+    }
+
     [HttpPost]
     public async Task<ActionResult<EventItem>> Create([FromBody] CreateEventRequest req, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData, CancellationToken cancellationToken)
     {
@@ -165,3 +197,5 @@ public class CreateTicketCategoryRequest
     [Range(1, 1000000)] public int Capacity { get; set; }
     [StringLength(300)] public string? Description { get; set; }
 }
+
+public record EventGoingResponse(int GoingCount, bool UserGoing);

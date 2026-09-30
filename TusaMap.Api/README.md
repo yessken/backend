@@ -63,6 +63,8 @@ dotnet run --project .\TusaMap.Api\TusaMap.Api.csproj
 
 - `GET /api/events` — список мероприятий (query: `category`)
 - `GET /api/events/{id}` — мероприятие по id
+- `GET /api/events/{id}/going` — число отметок участия и состояние текущего пользователя
+- `POST /api/events/{id}/going` — переключить участие; требуется проверенный Telegram `initData`
 - `POST /api/events/{id}/ticket-categories` — добавить тариф билета владельцу события или admin
 - `POST /api/events/{id}/promo-codes` — добавить промокод владельцу события или admin
 - `POST /api/events` — отправить мероприятие на модерацию (заголовок `X-Telegram-Init-Data`)
