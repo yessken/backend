@@ -5,6 +5,7 @@ using TusaMap.Api.Data;
 using TusaMap.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
 
 var port = Environment.GetEnvironmentVariable("PORT") ?? "5001";
 builder.WebHost.UseUrls($"http://*:{port}");

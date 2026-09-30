@@ -45,7 +45,7 @@ public static class Tusa2026EventSeeder
         ev.Price = canSellTickets
             ? Math.Round(ticketPriceKzt * 1.10m, 2, MidpointRounding.AwayFromZero)
             : null;
-        ev.ImageUrl = configuration["Events:Tusa2026:ImageUrl"] ?? "https://picsum.photos/900/600?random=2026";
+        ev.ImageUrl = configuration["Events:Tusa2026:ImageUrl"] ?? "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?auto=format&fit=crop&w=1200&q=85";
         ev.OrganizerName = "TUSA";
         ev.OrganizerTelegramId = 0;
         ev.Status = "approved";

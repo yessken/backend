@@ -22,17 +22,32 @@ public class EventsStore : IEventsStore
     {
         _db = db;
         if (!_db.Events.Any()) Seed();
+        ReplaceRandomSeedImages();
         if (!_db.TicketCategories.Any()) SeedTicketCategories();
+    }
+
+    private void ReplaceRandomSeedImages()
+    {
+        var stableImages = new Dictionary<string, string>
+        {
+            ["1"] = "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=1200&q=85",
+            ["2"] = "https://images.unsplash.com/photo-1511192336575-5a79af67a629?auto=format&fit=crop&w=1200&q=85",
+            ["3"] = "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?auto=format&fit=crop&w=1200&q=85",
+            ["4"] = "https://images.unsplash.com/photo-1585699324551-f6c309eedeca?auto=format&fit=crop&w=1200&q=85",
+        };
+        var events = _db.Events.Where(eventItem => stableImages.ContainsKey(eventItem.Id) && eventItem.ImageUrl.Contains("picsum.photos")).ToList();
+        foreach (var eventItem in events) eventItem.ImageUrl = stableImages[eventItem.Id];
+        if (events.Count > 0) _db.SaveChanges();
     }
 
     private void Seed()
     {
         foreach (var e in new[]
         {
-            new EventItem { Id = "1", Title = "Ночной концерт в столице", Description = "Живая музыка, бар, танцы до утра. Возраст 18+.", Date = "2026-10-15", Time = "22:00", Place = "Клуб «Астана»", Address = "ул. Кенесары, 40", Lat = 51.1605, Lng = 71.4704, Category = "концерт", Price = 3500, ImageUrl = "https://picsum.photos/400/200?random=1", OrganizerName = "Астана Events", Status = "approved" },
-            new EventItem { Id = "2", Title = "Джаз под звёздами", Description = "Открытая площадка, джаз-бэнд, коктейли.", Date = "2026-10-20", Time = "20:00", Place = "Парк Первого Президента", Address = "пр. Республики", Lat = 51.1252, Lng = 71.4305, Category = "концерт", Price = null, ImageUrl = "https://picsum.photos/400/200?random=2", OrganizerName = "Jazz Astana", Status = "approved" },
-            new EventItem { Id = "3", Title = "Техно-вечеринка", Description = "DJ-сет, два этажа, лаунж и танцпол.", Date = "2026-10-22", Time = "23:00", Place = "Лофт «Тусовка»", Address = "ул. Сыганак, 12", Lat = 51.1694, Lng = 71.4494, Category = "вечеринка", Price = 5000, ImageUrl = "https://picsum.photos/400/200?random=3", OrganizerName = "Loft Club", Status = "approved" },
-            new EventItem { Id = "4", Title = "Stand-up вечер", Description = "Стендап комики из Астаны и Алматы.", Date = "2026-10-18", Time = "19:00", Place = "Театр «Жастар»", Address = "ул. Есенберлина, 10", Lat = 51.1489, Lng = 71.4369, Category = "развлечения", Price = 2500, ImageUrl = "https://picsum.photos/400/200?random=4", OrganizerName = "Comedy Astana", Status = "approved" },
+            new EventItem { Id = "1", Title = "Ночной концерт в столице", Description = "Живая музыка, бар, танцы до утра. Возраст 18+.", Date = "2026-10-15", Time = "22:00", Place = "Клуб «Астана»", Address = "ул. Кенесары, 40", Lat = 51.1605, Lng = 71.4704, Category = "концерт", Price = 3500, ImageUrl = "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=1200&q=85", OrganizerName = "Астана Events", Status = "approved" },
+            new EventItem { Id = "2", Title = "Джаз под звёздами", Description = "Открытая площадка, джаз-бэнд, коктейли.", Date = "2026-10-20", Time = "20:00", Place = "Парк Первого Президента", Address = "пр. Республики", Lat = 51.1252, Lng = 71.4305, Category = "концерт", Price = null, ImageUrl = "https://images.unsplash.com/photo-1511192336575-5a79af67a629?auto=format&fit=crop&w=1200&q=85", OrganizerName = "Jazz Astana", Status = "approved" },
+            new EventItem { Id = "3", Title = "Техно-вечеринка", Description = "DJ-сет, два этажа, лаунж и танцпол.", Date = "2026-10-22", Time = "23:00", Place = "Лофт «Тусовка»", Address = "ул. Сыганак, 12", Lat = 51.1694, Lng = 71.4494, Category = "вечеринка", Price = 5000, ImageUrl = "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?auto=format&fit=crop&w=1200&q=85", OrganizerName = "Loft Club", Status = "approved" },
+            new EventItem { Id = "4", Title = "Stand-up вечер", Description = "Стендап комики из Астаны и Алматы.", Date = "2026-10-18", Time = "19:00", Place = "Театр «Жастар»", Address = "ул. Есенберлина, 10", Lat = 51.1489, Lng = 71.4369, Category = "развлечения", Price = 2500, ImageUrl = "https://images.unsplash.com/photo-1585699324551-f6c309eedeca?auto=format&fit=crop&w=1200&q=85", OrganizerName = "Comedy Astana", Status = "approved" },
         })
             _db.Events.Add(e);
         _db.SaveChanges();
