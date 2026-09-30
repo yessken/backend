@@ -37,6 +37,28 @@ dotnet run --project .\TusaMap.Api\TusaMap.Api.csproj
 - **Переменная окружения**: `Telegram__BotToken`
 - **appsettings.Development.json** (не коммить токен в репозиторий)
 
+## Подключение своего Telegram Mini App
+
+1. Создай своего бота в [@BotFather](https://t.me/BotFather); токен никому не пересылай и не добавляй в frontend.
+2. Задеплой Mini App на HTTPS. В BotFather привяжи domain и укажи URL Mini App/menu button на frontend origin.
+3. Получи свой числовой Telegram user ID для admin allowlist и создай отдельный случайный webhook secret. Bot API допускает в `secret_token` только латинские буквы, цифры, `_`, `-`; не используй bot token как webhook secret.
+4. Находясь в каталоге `TusaMap.Api`, задай настройки локально через User Secrets (подставь свои значения в терминале):
+
+    ```powershell
+    dotnet user-secrets set "Telegram:BotToken" "<TOKEN_FROM_BOTFATHER>"
+    dotnet user-secrets set "Telegram:WebAppUrl" "https://<your-mini-app-host>"
+    dotnet user-secrets set "Telegram:WebhookUrl" "https://<your-api-host>/api/telegram/webhook"
+    dotnet user-secrets set "Telegram:WebhookSecret" "<RANDOM_WEBHOOK_SECRET>"
+    dotnet user-secrets set "Telegram:AdminUserIds:0" "<YOUR_NUMERIC_TELEGRAM_ID>"
+    ```
+
+5. Запусти API в `Development`: при старте он зарегистрирует Mini App menu button и webhook. Telegram не сможет обратиться к `localhost`, поэтому для локального тестирования нужен публичный HTTPS tunnel.
+6. В frontend передавай исходный `Telegram.WebApp.initData` целиком в заголовке `X-Telegram-Init-Data`. Сервер проверяет HMAC подпись bot token и свежесть `auth_date`; не доверяй `initDataUnsafe`, ID или роли, присланным из UI.
+
+В production задай те же параметры через secret/environment-variable manager хостинга (`Telegram__BotToken`, `Telegram__WebAppUrl`, `Telegram__WebhookUrl`, `Telegram__WebhookSecret`, `Telegram__AdminUserIds__0`). Никогда не коммить credentials в `appsettings*.json` или Git. `Telegram:AdminUserIds` управляет admin-only endpoints.
+
+Для production используй стабильный HTTPS API hostname. Cloudflare Quick Tunnel выдаёт временное имя: при смене hostname обнови `Telegram:WebhookUrl` и frontend production `apiUrl`, перезапусти API и заново разверни frontend. Этот backend содержит TUSA-specific event seeder и сценарии; перед использованием как собственный starter замени бренд, TUSA event/payment defaults и модерационные правила.
+
 ## Эндпоинты
 
 - `GET /api/events` — список мероприятий (query: `category`)
@@ -53,7 +75,17 @@ dotnet run --project .\TusaMap.Api\TusaMap.Api.csproj
 - `POST /api/telegram/webhook` — Telegram updates; `/terms` и `/paysupport` доступны пользователям. Офлайн-билет оплачивается invoice в KZT через стороннего Telegram provider token; Stars допускаются только для Organizer Pro.
 - `/start event_tusa-2026` — показывает условия и создаёт KZT invoice только после явного согласия, при настроенных цене и provider token.
 - `/start subscribe_pro` — opens the Organizer Pro subscription invoice when `Payments__TelegramSubscriptionStars` is configured
+- `/organizerpro` — показать условия и приобрести/продлить Organizer Pro за Stars, если цена настроена.
 - `/refundstars <Telegram_ID>` — admin-only возврат последней Organizer Pro оплаты через Telegram Stars API.
+
+### Граница доступа
+
+- `GET /api/events` и `GET /api/events/{id}` предназначены для публичного чтения каталога.
+- Личные билеты, создание события через `POST /api/events`, quote заказа и organizer/admin endpoints должны вызываться с raw `initData`; admin дополнительно проверяется по allowlist `Telegram:AdminUserIds`.
+- `POST /api/events/public` в этом демо оставлен открытым для прототипирования и **не проверяет личность автора**. Перед открытым production запуском удали/закрой этот маршрут либо добавь серверную защиту от спама, модерацию и ограничения частоты. Не используй email/username из body как доказательство владельца.
+- `POST /api/tickets/public` и `/api/tickets` не создают ticket orders: заказ создаёт и резервирует только Telegram invoice flow после проверки условий.
+
+Для production CORS также следует сузить до конкретного frontend origin вместо разрешения произвольных origin.
 
 Для production задай:
 

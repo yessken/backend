@@ -41,6 +41,27 @@ public class AdminController : ControllerBase
         return Ok(_db.Tickets.AsNoTracking().Where(x => x.RefundStatus == "requested").ToList());
     }
 
+    [HttpGet("bot-messages")]
+    public IActionResult BotMessages(
+        [FromHeader(Name = "X-Telegram-Init-Data")] string? initData,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 100)
+    {
+        var admin = _auth.ValidateInitData(initData);
+        if (admin is null || !_users.IsAdmin(admin.Id)) return StatusCode(StatusCodes.Status403Forbidden);
+        skip = Math.Clamp(skip, 0, 100000);
+        take = Math.Clamp(take, 1, 200);
+        var messages = _db.BotMessageLogs.AsNoTracking()
+            .OrderByDescending(x => x.ReceivedAt)
+            .ThenByDescending(x => x.Id)
+            .Skip(skip)
+            .Take(take)
+            .Select(x => new BotMessageLogRow(x.Id, x.TelegramUserId, x.SenderName, x.Username,
+                x.MessageType, x.Content, x.ReceivedAt))
+            .ToList();
+        return Ok(messages);
+    }
+
     [HttpGet("tickets/by-event")]
     public IActionResult TicketsByEvent([FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
     {
@@ -100,3 +121,4 @@ public class AdminController : ControllerBase
 
 public record SetRoleRequest(string Role);
 public record SetSubscriptionRequest(string Plan, string Status, DateTime? ExpiresAt);
+public record BotMessageLogRow(long Id, long TelegramUserId, string SenderName, string? Username, string MessageType, string Content, DateTime ReceivedAt);

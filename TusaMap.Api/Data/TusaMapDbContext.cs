@@ -17,6 +17,7 @@ public class TusaMapDbContext : DbContext
     public DbSet<FunnelEvent> FunnelEvents => Set<FunnelEvent>();
     public DbSet<EventInterest> EventInterests => Set<EventInterest>();
     public DbSet<TicketCheckIn> TicketCheckIns => Set<TicketCheckIn>();
+    public DbSet<BotMessageLog> BotMessageLogs => Set<BotMessageLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -42,5 +43,10 @@ public class TusaMapDbContext : DbContext
         modelBuilder.Entity<TicketCheckIn>().HasKey(x => x.Id);
         modelBuilder.Entity<TicketCheckIn>().HasIndex(x => x.TicketId).IsUnique();
         modelBuilder.Entity<Ticket>().HasOne(x => x.CheckIn).WithOne().HasForeignKey<TicketCheckIn>(x => x.TicketId);
+        modelBuilder.Entity<BotMessageLog>().HasIndex(x => x.UpdateId).IsUnique();
+        modelBuilder.Entity<BotMessageLog>().Property(x => x.SenderName).HasMaxLength(160);
+        modelBuilder.Entity<BotMessageLog>().Property(x => x.Username).HasMaxLength(64);
+        modelBuilder.Entity<BotMessageLog>().Property(x => x.MessageType).HasMaxLength(40);
+        modelBuilder.Entity<BotMessageLog>().Property(x => x.Content).HasMaxLength(4096);
     }
 }

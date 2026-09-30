@@ -24,11 +24,17 @@ public class EventsController : ControllerBase
     }
 
     [HttpGet]
-    public ActionResult<IEnumerable<EventItem>> Get([FromQuery] string? category = null)
+    public ActionResult<IEnumerable<EventItem>> Get([FromQuery] string? category = null, [FromQuery] string? q = null)
     {
         var list = _store.GetAll();
         if (!string.IsNullOrEmpty(category))
             list = list.Where(e => string.Equals(e.Category, category, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var query = q.Trim();
+            list = list.Where(e => new[] { e.Title, e.Place, e.Address, e.Description, e.Category }
+                .Any(value => value.Contains(query, StringComparison.OrdinalIgnoreCase))).ToList();
+        }
         return Ok(list);
     }
 

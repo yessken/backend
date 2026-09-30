@@ -172,6 +172,7 @@ public class TelegramBotService : ITelegramBotService
                 {
                     new { command = "terms", description = "Условия сервиса и покупки" },
                     new { command = "paysupport", description = "Помощь с оплатой и возвратом" },
+                    new { command = "organizerpro", description = "Подписка для организаторов" },
                     new { command = "start", description = "Открыть TUSA" },
                 }
             }, cancellationToken);

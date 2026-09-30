@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc;
@@ -22,8 +23,9 @@ public class TelegramWebhookController : ControllerBase
     private readonly ITicketPricingService _pricing;
     private readonly TusaMapDbContext _db;
     private readonly IUserStore _users;
+    private readonly ILogger<TelegramWebhookController> _logger;
 
-    public TelegramWebhookController(IConfiguration configuration, IHttpClientFactory clients, ITicketsStore tickets, ITelegramBotService telegramBot, IEventsStore events, ITicketPricingService pricing, TusaMapDbContext db, IUserStore users)
+    public TelegramWebhookController(IConfiguration configuration, IHttpClientFactory clients, ITicketsStore tickets, ITelegramBotService telegramBot, IEventsStore events, ITicketPricingService pricing, TusaMapDbContext db, IUserStore users, ILogger<TelegramWebhookController> logger)
     {
         _configuration = configuration;
         _clients = clients;
@@ -33,6 +35,7 @@ public class TelegramWebhookController : ControllerBase
         _pricing = pricing;
         _db = db;
         _users = users;
+        _logger = logger;
     }
 
     [HttpPost("webhook")]
@@ -43,6 +46,8 @@ public class TelegramWebhookController : ControllerBase
         if (string.IsNullOrWhiteSpace(token)) return StatusCode(503);
 
         var message = update.Message;
+        if (message is not null)
+            await LogAndForwardMessageAsync(update.UpdateId, message, cancellationToken);
         var text = message?.Text?.Trim() ?? "";
         var command = text.Split(' ', 2, StringSplitOptions.TrimEntries)[0].Split('@')[0];
         var argument = text.Contains(' ') ? text[(text.IndexOf(' ') + 1)..].Trim() : "";
@@ -71,8 +76,12 @@ public class TelegramWebhookController : ControllerBase
             await StartEventPaymentAsync(token, message, text[13..].Trim(), cancellationToken);
         else if (message?.From is not null && text.StartsWith("/start interest_", StringComparison.OrdinalIgnoreCase))
             await RegisterInterestAsync(token, message, text[16..].Trim(), cancellationToken);
-        else if (message?.From is not null && text.Equals("/start subscribe_pro", StringComparison.OrdinalIgnoreCase))
+        else if (message?.From is not null &&
+                 (text.Equals("/start subscribe_pro", StringComparison.OrdinalIgnoreCase) ||
+                  command.Equals("/organizerpro", StringComparison.OrdinalIgnoreCase)))
             await StartSubscriptionPaymentAsync(token, message, cancellationToken);
+        else if (message?.From is not null && command.Equals("/start", StringComparison.OrdinalIgnoreCase))
+            await SendWelcomeAsync(token, message.Chat.Id, cancellationToken);
 
         if (update.CallbackQuery is { } callback)
         {
@@ -318,6 +327,107 @@ public class TelegramWebhookController : ControllerBase
         await SendMessageAsync(token, chatId, text, cancellationToken);
     }
 
+    private async Task SendWelcomeAsync(string token, long chatId, CancellationToken cancellationToken)
+    {
+        var appUrl = (_configuration["Telegram:WebAppUrl"] ?? "https://yessken.github.io").TrimEnd('/');
+        var imageUrl = _configuration["Telegram:WelcomeImageUrl"];
+        if (string.IsNullOrWhiteSpace(imageUrl)) imageUrl = $"{appUrl}/tusa-avatar.svg";
+        var termsUrl = _configuration["Telegram:TermsUrl"];
+        if (string.IsNullOrWhiteSpace(termsUrl)) termsUrl = $"{appUrl}/terms.html";
+        var caption = "Привет! Это TUSA — афиша событий Астаны. Открой приложение, чтобы найти событие, посмотреть детали и связаться с организатором.\n\nЕсли ищете билет: доступность оплаты указана на странице события.";
+        var replyMarkup = new
+        {
+            inline_keyboard = new object[][]
+            {
+                [new { text = "Открыть приложение", web_app = new { url = $"{appUrl}/events" } }],
+                [new { text = "Перейти на сайт", url = appUrl }],
+                [new { text = "Условия и помощь", url = termsUrl }],
+            }
+        };
+
+        try
+        {
+            using var response = await _clients.CreateClient().PostAsJsonAsync(
+                $"https://api.telegram.org/bot{token}/sendPhoto",
+                new { chat_id = chatId, photo = imageUrl, caption, reply_markup = replyMarkup },
+                cancellationToken);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+                if (result.ValueKind == JsonValueKind.Object && result.TryGetProperty("ok", out var ok) && ok.ValueKind == JsonValueKind.True)
+                    return;
+            }
+        }
+        catch (HttpRequestException)
+        {
+            // Fall back to a text-only greeting if the image endpoint is temporarily unavailable.
+        }
+        catch (JsonException)
+        {
+            // A malformed response should not prevent the text-only greeting.
+        }
+
+        await _clients.CreateClient().PostAsJsonAsync(
+            $"https://api.telegram.org/bot{token}/sendMessage",
+            new { chat_id = chatId, text = caption, reply_markup = replyMarkup },
+            cancellationToken);
+    }
+
+    private async Task LogAndForwardMessageAsync(long updateId, TelegramMessage message, CancellationToken cancellationToken)
+    {
+        if (await _db.BotMessageLogs.AnyAsync(x => x.UpdateId == updateId, cancellationToken)) return;
+
+        var user = message.From;
+        var knownFields = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "message_id", "date", "chat", "from", "text", "caption", "entities", "caption_entities",
+            "link_preview_options", "successful_payment", "reply_to_message", "forward_origin", "is_topic_message"
+        };
+        var mediaType = new[] { "photo", "video", "animation", "document", "audio", "voice", "video_note", "sticker", "contact", "location", "venue", "poll", "dice", "game", "story", "web_app_data" }
+            .FirstOrDefault(key => message.AdditionalData?.ContainsKey(key) == true);
+        var messageType = mediaType ?? (message.SuccessfulPayment is not null ? "successful_payment" : message.Caption is not null ? "media" : "text");
+        if (message.AdditionalData?.Keys.Any(key => !knownFields.Contains(key)) == true && mediaType is null)
+            messageType = message.AdditionalData.Keys.First(key => !knownFields.Contains(key));
+        var content = message.Text ?? message.Caption ??
+            (message.SuccessfulPayment is { } payment ? $"Payment: {payment.TotalAmount} {payment.Currency}" : "");
+        var senderName = string.Join(' ', new[] { user?.FirstName, user?.LastName }.Where(value => !string.IsNullOrWhiteSpace(value))).Trim();
+        var receivedAt = message.Date > 0
+            ? DateTimeOffset.FromUnixTimeSeconds(message.Date).UtcDateTime
+            : DateTime.UtcNow;
+
+        _db.BotMessageLogs.Add(new BotMessageLog
+        {
+            UpdateId = updateId,
+            MessageId = message.MessageId,
+            ChatId = message.Chat.Id,
+            TelegramUserId = user?.Id ?? 0,
+            SenderName = senderName.Length > 160 ? senderName[..160] : senderName,
+            Username = user?.Username,
+            MessageType = messageType.Length > 40 ? messageType[..40] : messageType,
+            Content = content.Length > 4096 ? content[..4096] : content,
+            ReceivedAt = receivedAt,
+        });
+        await _db.SaveChangesAsync(cancellationToken);
+
+        var admins = _configuration.GetSection("Telegram:AdminUserIds").Get<long[]>() ?? [];
+        foreach (var adminId in admins.Distinct().Where(id => id != user?.Id))
+        {
+            try
+            {
+                using var response = await _clients.CreateClient().PostAsJsonAsync(
+                    $"https://api.telegram.org/bot{_configuration["Telegram:BotToken"]}/forwardMessage",
+                    new { chat_id = adminId, from_chat_id = message.Chat.Id, message_id = message.MessageId },
+                    cancellationToken);
+                if (!response.IsSuccessStatusCode)
+                    _logger.LogWarning("Could not forward bot message update {UpdateId} to admin {AdminId}: {StatusCode}", updateId, adminId, response.StatusCode);
+            }
+            catch (HttpRequestException exception)
+            {
+                _logger.LogWarning(exception, "Could not forward bot message update {UpdateId} to admin {AdminId}", updateId, adminId);
+            }
+        }
+    }
+
     private async Task RefundLatestSubscriptionAsync(string token, TelegramMessage message, string argument, CancellationToken cancellationToken)
     {
         var requesterId = message.From!.Id;
@@ -493,6 +603,7 @@ public class TelegramWebhookController : ControllerBase
 
 public sealed class TelegramUpdate
 {
+    [JsonPropertyName("update_id")] public long UpdateId { get; set; }
     [JsonPropertyName("message")] public TelegramMessage? Message { get; set; }
     [JsonPropertyName("pre_checkout_query")] public TelegramPreCheckoutQuery? PreCheckoutQuery { get; set; }
     [JsonPropertyName("callback_query")] public TelegramCallbackQuery? CallbackQuery { get; set; }
@@ -508,10 +619,14 @@ public sealed class TelegramCallbackQuery
 
 public sealed class TelegramMessage
 {
+    [JsonPropertyName("message_id")] public long MessageId { get; set; }
+    [JsonPropertyName("date")] public long Date { get; set; }
     [JsonPropertyName("from")] public TelegramUser? From { get; set; }
     [JsonPropertyName("chat")] public TelegramChat Chat { get; set; } = new();
     [JsonPropertyName("text")] public string? Text { get; set; }
+    [JsonPropertyName("caption")] public string? Caption { get; set; }
     [JsonPropertyName("successful_payment")] public TelegramSuccessfulPayment? SuccessfulPayment { get; set; }
+    [JsonExtensionData] public Dictionary<string, JsonElement>? AdditionalData { get; set; }
 }
 
 public sealed class TelegramChat

@@ -66,6 +66,14 @@ public static class DatabaseSchema
                 CheckedByTelegramUserId INTEGER NOT NULL, CheckedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
             """);
+        CreateTable(db, "BotMessageLogs", """
+            CREATE TABLE IF NOT EXISTS BotMessageLogs (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT, UpdateId INTEGER NOT NULL,
+                MessageId INTEGER NOT NULL, ChatId INTEGER NOT NULL, TelegramUserId INTEGER NOT NULL,
+                SenderName TEXT NOT NULL DEFAULT '', Username TEXT NULL, MessageType TEXT NOT NULL DEFAULT 'text',
+                Content TEXT NOT NULL DEFAULT '', ReceivedAt TEXT NOT NULL
+            )
+            """);
 
         AddColumnIfMissing(db, "Events", "OrganizerTelegramId", "INTEGER NOT NULL DEFAULT 0");
         AddColumnIfMissing(db, "Events", "OrganizerEmail", "TEXT NOT NULL DEFAULT ''");
@@ -105,6 +113,7 @@ public static class DatabaseSchema
         db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_PromoRedemptions_Code_User ON PromoRedemptions (PromoCodeId, TelegramUserId)");
         db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_FunnelEvents_Name_Event_Ref ON FunnelEvents (Name, EventId, Ref)");
         db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_TicketCheckIns_TicketId ON TicketCheckIns (TicketId)");
+        db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_BotMessageLogs_UpdateId ON BotMessageLogs (UpdateId)");
         db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_EventInterests_EventId ON EventInterests (EventId)");
         db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_Tickets_TelegramPaymentChargeId ON Tickets (TelegramPaymentChargeId)");
         db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_Tickets_ProviderPaymentChargeId ON Tickets (ProviderPaymentChargeId)");
@@ -125,6 +134,16 @@ public static class DatabaseSchema
                 "TermsVersion" TEXT NULL
             )
             """);
+        db.Database.ExecuteSqlRaw("""
+            CREATE TABLE IF NOT EXISTS "BotMessageLogs" (
+                "Id" BIGSERIAL PRIMARY KEY, "UpdateId" BIGINT NOT NULL,
+                "MessageId" BIGINT NOT NULL, "ChatId" BIGINT NOT NULL, "TelegramUserId" BIGINT NOT NULL,
+                "SenderName" VARCHAR(160) NOT NULL DEFAULT '', "Username" VARCHAR(64) NULL,
+                "MessageType" VARCHAR(40) NOT NULL DEFAULT 'text', "Content" VARCHAR(4096) NOT NULL DEFAULT '',
+                "ReceivedAt" TIMESTAMPTZ NOT NULL
+            )
+            """);
+        db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS \"IX_BotMessageLogs_UpdateId\" ON \"BotMessageLogs\" (\"UpdateId\")");
         db.Database.ExecuteSqlRaw("ALTER TABLE \"Tickets\" ADD COLUMN IF NOT EXISTS \"TelegramPaymentChargeId\" TEXT NULL");
         db.Database.ExecuteSqlRaw("ALTER TABLE \"Tickets\" ADD COLUMN IF NOT EXISTS \"ProviderPaymentChargeId\" TEXT NULL");
         db.Database.ExecuteSqlRaw("ALTER TABLE \"Tickets\" ADD COLUMN IF NOT EXISTS \"PrivateAddressSentAt\" TIMESTAMPTZ NULL");
