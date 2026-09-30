@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using System.ComponentModel.DataAnnotations;
 using TusaMap.Api.Models;
 using TusaMap.Api.Services;
@@ -14,13 +15,15 @@ public class EventsController : ControllerBase
     private readonly ITelegramAuthService _telegramAuth;
     private readonly IUserStore _users;
     private readonly TusaMapDbContext _db;
+    private readonly ITelegramBotService _telegramBot;
 
-    public EventsController(IEventsStore store, ITelegramAuthService telegramAuth, IUserStore users, TusaMapDbContext db)
+    public EventsController(IEventsStore store, ITelegramAuthService telegramAuth, IUserStore users, TusaMapDbContext db, ITelegramBotService telegramBot)
     {
         _store = store;
         _telegramAuth = telegramAuth;
         _users = users;
         _db = db;
+        _telegramBot = telegramBot;
     }
 
     [HttpGet]
@@ -48,22 +51,23 @@ public class EventsController : ControllerBase
     }
 
     [HttpPost]
-    public ActionResult<EventItem> Create([FromBody] CreateEventRequest req, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
+    public async Task<ActionResult<EventItem>> Create([FromBody] CreateEventRequest req, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData, CancellationToken cancellationToken)
     {
         var user = _telegramAuth.ValidateInitData(initData);
         if (user == null)
             return Unauthorized("Invalid or missing Telegram initData");
         _users.Upsert(user);
-        return AddEvent(req, user.Id);
+        return await AddEventAsync(req, user.Id, cancellationToken);
     }
 
     [HttpPost("public")]
-    public ActionResult<EventItem> CreatePublic([FromBody] CreateEventRequest req)
+    [EnableRateLimiting("public-event-submissions")]
+    public async Task<ActionResult<EventItem>> CreatePublic([FromBody] CreateEventRequest req, CancellationToken cancellationToken)
     {
-        return AddEvent(req, 0);
+        return await AddEventAsync(req, 0, cancellationToken);
     }
 
-    private ActionResult<EventItem> AddEvent(CreateEventRequest req, long organizerTelegramId)
+    private async Task<ActionResult<EventItem>> AddEventAsync(CreateEventRequest req, long organizerTelegramId, CancellationToken cancellationToken)
     {
         var e = new EventItem
         {
@@ -94,8 +98,9 @@ public class EventsController : ControllerBase
                 Price = category.Price,
                 Capacity = category.Capacity,
             }));
-            _db.SaveChanges();
+            await _db.SaveChangesAsync(cancellationToken);
         }
+        await _telegramBot.NotifyAdminsOfEventSubmissionAsync(created, cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 
@@ -114,6 +119,15 @@ public class EventsController : ControllerBase
         if (user is null || !_users.IsAdmin(user.Id)) return Forbid();
         var approved = _store.Approve(id);
         return approved is null ? NotFound() : Ok(approved);
+    }
+
+    [HttpPost("{id}/reject")]
+    public ActionResult<EventItem> Reject(string id, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
+    {
+        var user = _telegramAuth.ValidateInitData(initData);
+        if (user is null || !_users.IsAdmin(user.Id)) return Forbid();
+        var rejected = _store.Reject(id);
+        return rejected is null ? NotFound() : Ok(rejected);
     }
 }
 

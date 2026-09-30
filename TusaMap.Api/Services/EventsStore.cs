@@ -11,6 +11,7 @@ public interface IEventsStore
     EventItem Add(EventItem e);
     IReadOnlyList<EventItem> GetPending();
     EventItem? Approve(string id);
+    EventItem? Reject(string id);
 }
 
 public class EventsStore : IEventsStore
@@ -39,8 +40,27 @@ public class EventsStore : IEventsStore
 
     public IReadOnlyList<EventItem> GetAll() => _db.Events.AsNoTracking().Include(e => e.TicketCategories).Where(e => e.Status == "approved").ToList();
     public EventItem? GetById(string id) => _db.Events.AsNoTracking().Include(e => e.TicketCategories).FirstOrDefault(e => e.Id == id && e.Status == "approved");
-    public IReadOnlyList<EventItem> GetPending() => _db.Events.AsNoTracking().Where(e => e.Status == "pending").ToList();
-    public EventItem? Approve(string id) { var e = _db.Events.Find(id); if (e is null) return null; e.Status = "approved"; _db.SaveChanges(); return e; }
+    public IReadOnlyList<EventItem> GetPending() => _db.Events.AsNoTracking()
+        .Where(e => e.Status == "pending")
+        .OrderBy(e => e.CreatedAt)
+        .ToList();
+    public EventItem? Approve(string id)
+    {
+        var e = _db.Events.Find(id);
+        if (e is null || e.Status != "pending") return null;
+        e.Status = "approved";
+        _db.SaveChanges();
+        return e;
+    }
+
+    public EventItem? Reject(string id)
+    {
+        var e = _db.Events.Find(id);
+        if (e is null || e.Status != "pending") return null;
+        e.Status = "rejected";
+        _db.SaveChanges();
+        return e;
+    }
 
     private void SeedTicketCategories()
     {

@@ -9,6 +9,7 @@ public interface ITelegramBotService
     Task SendTicketAsync(Ticket ticket, CancellationToken cancellationToken = default);
     Task NotifyAdminsOfTicketSaleAsync(Ticket ticket, CancellationToken cancellationToken = default);
     Task NotifyAdminsOfSubscriptionAsync(long telegramUserId, int stars, CancellationToken cancellationToken = default);
+    Task NotifyAdminsOfEventSubmissionAsync(EventItem eventItem, CancellationToken cancellationToken = default);
     Task<bool> NotifyAdminsOfPaymentSupportAsync(long telegramUserId, string details, CancellationToken cancellationToken = default);
     Task<bool> SendPrivateVenueAddressAsync(long telegramUserId, string eventTitle, string address, string date, string time, CancellationToken cancellationToken = default);
     Task<bool> RefundStarPaymentAsync(long telegramUserId, string chargeId, CancellationToken cancellationToken = default);
@@ -48,6 +49,22 @@ public class TelegramBotService : ITelegramBotService
 
     public Task NotifyAdminsOfSubscriptionAsync(long telegramUserId, int stars, CancellationToken cancellationToken = default)
         => NotifyAdminsAsync($"Новая оплата Organizer Pro\nTelegram ID: {telegramUserId}\nСумма: {stars} ⭐\nСрок: 30 дней", cancellationToken);
+
+    public Task NotifyAdminsOfEventSubmissionAsync(EventItem eventItem, CancellationToken cancellationToken = default)
+    {
+        var appUrl = _configuration["Telegram:WebAppUrl"]?.TrimEnd('/');
+        var reviewUrl = string.IsNullOrWhiteSpace(appUrl) ? "" : $"\nОчередь модерации: {appUrl}/admin/event-review";
+        var contact = string.Join("\n", new[]
+        {
+            string.IsNullOrWhiteSpace(eventItem.OrganizerName) ? null : $"Организатор: {eventItem.OrganizerName}",
+            string.IsNullOrWhiteSpace(eventItem.OrganizerEmail) ? null : $"Email: {eventItem.OrganizerEmail}",
+            string.IsNullOrWhiteSpace(eventItem.OrganizerPhone) ? null : $"Телефон: {eventItem.OrganizerPhone}",
+            eventItem.OrganizerTelegramId == 0 ? null : $"Telegram ID: {eventItem.OrganizerTelegramId}",
+        }.Where(value => value is not null));
+        var text = $"Новая заявка на событие\n\n{eventItem.Title}\n{eventItem.Date} · {eventItem.Time} · {eventItem.Place}\n{eventItem.Category} · {(eventItem.Price is null or 0 ? "бесплатно" : $"{eventItem.Price:N0} ₸")}\nID: {eventItem.Id}" +
+                   (string.IsNullOrWhiteSpace(contact) ? "" : $"\n\n{contact}") + reviewUrl;
+        return NotifyAdminsAsync(text, cancellationToken);
+    }
 
     public async Task<bool> NotifyAdminsOfPaymentSupportAsync(long telegramUserId, string details, CancellationToken cancellationToken = default)
     {

@@ -66,8 +66,10 @@ dotnet run --project .\TusaMap.Api\TusaMap.Api.csproj
 - `POST /api/events/{id}/ticket-categories` — добавить тариф билета владельцу события или admin
 - `POST /api/events/{id}/promo-codes` — добавить промокод владельцу события или admin
 - `POST /api/events` — отправить мероприятие на модерацию (заголовок `X-Telegram-Init-Data`)
+- `POST /api/events/public` — демо-форма заявки без Telegram-авторизации; заявка остаётся `pending`, публично не появляется и требует ручной проверки; ограничение — 5 заявок за 10 минут на API-видимый IP
 - `GET /api/events/pending` — список заявок для admin Telegram ID
 - `POST /api/events/{id}/approve` — одобрить событие для admin Telegram ID
+- `POST /api/events/{id}/reject` — отклонить ожидающую заявку для admin Telegram ID
 - `GET /api/tickets/me` — мои билеты (заголовок `X-Telegram-Init-Data`)
 - `POST /api/tickets` и `/api/tickets/public` — отключены, чтобы не создавать неоплаченные заказы. Билет оформляется через Telegram invoice.
 - `POST /api/tickets/quote` — проверить цену, категорию, лимит и промокод до создания заказа
@@ -78,11 +80,13 @@ dotnet run --project .\TusaMap.Api\TusaMap.Api.csproj
 - `/organizerpro` — показать условия и приобрести/продлить Organizer Pro за Stars, если цена настроена.
 - `/refundstars <Telegram_ID>` — admin-only возврат последней Organizer Pro оплаты через Telegram Stars API.
 
+После отправки заявки администраторы получают Telegram-уведомление (если заданы bot token и `Telegram:AdminUserIds`). Очередь доступна в Mini App: `/admin/event-review`. Решения разрешены только аккаунтам из серверного allowlist; повторно обработать уже закрытую заявку нельзя.
+
 ### Граница доступа
 
 - `GET /api/events` и `GET /api/events/{id}` предназначены для публичного чтения каталога.
 - Личные билеты, создание события через `POST /api/events`, quote заказа и organizer/admin endpoints должны вызываться с raw `initData`; admin дополнительно проверяется по allowlist `Telegram:AdminUserIds`.
-- `POST /api/events/public` в этом демо оставлен открытым для прототипирования и **не проверяет личность автора**. Перед открытым production запуском удали/закрой этот маршрут либо добавь серверную защиту от спама, модерацию и ограничения частоты. Не используй email/username из body как доказательство владельца.
+- `POST /api/events/public` в этом демо оставлен открытым для прототипирования и **не проверяет личность автора**. Есть базовый лимит 5 заявок за 10 минут на API-видимый IP, но перед масштабным публичным запуском добавь captcha/антиспам либо закрой маршрут. За reverse proxy настрой доверенную передачу клиентского IP; не доверяй произвольному `X-Forwarded-For`. Не используй email/username из body как доказательство владельца.
 - `POST /api/tickets/public` и `/api/tickets` не создают ticket orders: заказ создаёт и резервирует только Telegram invoice flow после проверки условий.
 
 Для production CORS также следует сузить до конкретного frontend origin вместо разрешения произвольных origin.
