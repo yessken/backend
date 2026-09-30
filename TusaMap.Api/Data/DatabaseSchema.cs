@@ -52,6 +52,13 @@ public static class DatabaseSchema
                 PRIMARY KEY (EventId, TelegramUserId)
             )
             """);
+        CreateTable(db, "EventParticipations", """
+            CREATE TABLE IF NOT EXISTS EventParticipations (
+                EventId TEXT NOT NULL, TelegramUserId INTEGER NOT NULL,
+                CreatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (EventId, TelegramUserId)
+            )
+            """);
         CreateTable(db, "OrganizerSubscriptions", """
             CREATE TABLE IF NOT EXISTS OrganizerSubscriptions (
                 TelegramUserId INTEGER NOT NULL PRIMARY KEY, Plan TEXT NOT NULL DEFAULT 'starter',
@@ -108,6 +115,7 @@ public static class DatabaseSchema
         AddColumnIfMissing(db, "OrganizerSubscriptions", "LastTelegramChargeId", "TEXT NULL");
         AddColumnIfMissing(db, "OrganizerSubscriptions", "TermsAcceptedAt", "TEXT NULL");
         AddColumnIfMissing(db, "OrganizerSubscriptions", "TermsVersion", "TEXT NULL");
+        AddColumnIfMissing(db, "EventInterests", "TicketAvailabilityNotifiedAt", "TEXT NULL");
 
         db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_PromoCodes_Code ON PromoCodes (Code)");
         db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_PromoRedemptions_Code_User ON PromoRedemptions (PromoCodeId, TelegramUserId)");
@@ -115,6 +123,7 @@ public static class DatabaseSchema
         db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_TicketCheckIns_TicketId ON TicketCheckIns (TicketId)");
         db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_BotMessageLogs_UpdateId ON BotMessageLogs (UpdateId)");
         db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_EventInterests_EventId ON EventInterests (EventId)");
+        db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_EventParticipations_EventId ON EventParticipations (EventId)");
         db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_Tickets_TelegramPaymentChargeId ON Tickets (TelegramPaymentChargeId)");
         db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_Tickets_ProviderPaymentChargeId ON Tickets (ProviderPaymentChargeId)");
         db.Database.ExecuteSqlRaw("UPDATE Events SET IsDemo = 1 WHERE Id IN ('1','2','3','4') AND OrganizerTelegramId = 0");
@@ -160,6 +169,10 @@ public static class DatabaseSchema
         db.Database.ExecuteSqlRaw("ALTER TABLE \"FunnelEvents\" ADD COLUMN IF NOT EXISTS \"VisitorId\" TEXT NULL");
         db.Database.ExecuteSqlRaw("CREATE TABLE IF NOT EXISTS \"EventInterests\" (\"EventId\" TEXT NOT NULL, \"TelegramUserId\" BIGINT NOT NULL, \"CreatedAt\" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (\"EventId\", \"TelegramUserId\"))");
         db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS \"IX_EventInterests_EventId\" ON \"EventInterests\" (\"EventId\")");
+        db.Database.ExecuteSqlRaw("ALTER TABLE \"EventInterests\" ADD COLUMN IF NOT EXISTS \"TicketAvailabilityNotifiedAt\" TIMESTAMPTZ NULL");
+        db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS \"IX_EventInterests_EventId_TicketAvailabilityNotifiedAt\" ON \"EventInterests\" (\"EventId\", \"TicketAvailabilityNotifiedAt\")");
+        db.Database.ExecuteSqlRaw("CREATE TABLE IF NOT EXISTS \"EventParticipations\" (\"EventId\" TEXT NOT NULL, \"TelegramUserId\" BIGINT NOT NULL, \"CreatedAt\" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (\"EventId\", \"TelegramUserId\"))");
+        db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS \"IX_EventParticipations_EventId\" ON \"EventParticipations\" (\"EventId\")");
         db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Tickets_TelegramPaymentChargeId\" ON \"Tickets\" (\"TelegramPaymentChargeId\")");
         db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Tickets_ProviderPaymentChargeId\" ON \"Tickets\" (\"ProviderPaymentChargeId\")");
         db.Database.ExecuteSqlRaw("UPDATE \"Events\" SET \"IsDemo\" = TRUE WHERE \"Id\" IN ('1','2','3','4') AND \"OrganizerTelegramId\" = 0");

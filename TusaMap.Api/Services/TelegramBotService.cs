@@ -10,6 +10,7 @@ public interface ITelegramBotService
     Task NotifyAdminsOfTicketSaleAsync(Ticket ticket, CancellationToken cancellationToken = default);
     Task NotifyAdminsOfSubscriptionAsync(long telegramUserId, int stars, CancellationToken cancellationToken = default);
     Task NotifyAdminsOfEventSubmissionAsync(EventItem eventItem, CancellationToken cancellationToken = default);
+    Task<bool> NotifyTicketAvailabilityAsync(long telegramUserId, string eventTitle, string eventUrl, CancellationToken cancellationToken = default);
     Task<bool> NotifyAdminsOfPaymentSupportAsync(long telegramUserId, string details, CancellationToken cancellationToken = default);
     Task<bool> SendPrivateVenueAddressAsync(long telegramUserId, string eventTitle, string address, string date, string time, CancellationToken cancellationToken = default);
     Task<bool> RefundStarPaymentAsync(long telegramUserId, string chargeId, CancellationToken cancellationToken = default);
@@ -64,6 +65,30 @@ public class TelegramBotService : ITelegramBotService
         var text = $"Новая заявка на событие\n\n{eventItem.Title}\n{eventItem.Date} · {eventItem.Time} · {eventItem.Place}\n{eventItem.Category} · {(eventItem.Price is null or 0 ? "бесплатно" : $"{eventItem.Price:N0} ₸")}\nID: {eventItem.Id}" +
                    (string.IsNullOrWhiteSpace(contact) ? "" : $"\n\n{contact}") + reviewUrl;
         return NotifyAdminsAsync(text, cancellationToken);
+    }
+
+    public async Task<bool> NotifyTicketAvailabilityAsync(long telegramUserId, string eventTitle, string eventUrl, CancellationToken cancellationToken = default)
+    {
+        var token = _configuration["Telegram:BotToken"];
+        if (string.IsNullOrWhiteSpace(token) || telegramUserId == 0) return false;
+        try
+        {
+            using var response = await _clients.CreateClient().PostAsJsonAsync(
+                $"https://api.telegram.org/bot{token}/sendMessage",
+                new
+                {
+                    chat_id = telegramUserId,
+                    text = $"Билеты появились: {eventTitle}. Откройте событие, чтобы посмотреть доступность и условия покупки.",
+                    reply_markup = new { inline_keyboard = new[] { new[] { new { text = "Открыть событие", url = eventUrl } } } },
+                }, cancellationToken);
+            if (response.IsSuccessStatusCode) return true;
+            _logger.LogWarning("Ticket availability notification failed for event {EventTitle} and Telegram user {TelegramUserId}: {StatusCode}", eventTitle, telegramUserId, response.StatusCode);
+        }
+        catch (HttpRequestException exception)
+        {
+            _logger.LogWarning(exception, "Ticket availability notification transport failed for Telegram user {TelegramUserId}", telegramUserId);
+        }
+        return false;
     }
 
     public async Task<bool> NotifyAdminsOfPaymentSupportAsync(long telegramUserId, string details, CancellationToken cancellationToken = default)

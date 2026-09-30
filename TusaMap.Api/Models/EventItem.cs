@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace TusaMap.Api.Models;
 
@@ -28,4 +29,6 @@ public class EventItem
     public string Status { get; set; } = "pending";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public List<TicketCategory> TicketCategories { get; set; } = [];
+    [NotMapped]
+    public bool TicketSalesEnabled { get; set; }
 }

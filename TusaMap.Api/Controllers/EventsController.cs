@@ -16,14 +16,18 @@ public class EventsController : ControllerBase
     private readonly IUserStore _users;
     private readonly TusaMapDbContext _db;
     private readonly ITelegramBotService _telegramBot;
+    private readonly IEventInterestNotifier _interestNotifier;
+    private readonly IConfiguration _configuration;
 
-    public EventsController(IEventsStore store, ITelegramAuthService telegramAuth, IUserStore users, TusaMapDbContext db, ITelegramBotService telegramBot)
+    public EventsController(IEventsStore store, ITelegramAuthService telegramAuth, IUserStore users, TusaMapDbContext db, ITelegramBotService telegramBot, IEventInterestNotifier interestNotifier, IConfiguration configuration)
     {
         _store = store;
         _telegramAuth = telegramAuth;
         _users = users;
         _db = db;
         _telegramBot = telegramBot;
+        _interestNotifier = interestNotifier;
+        _configuration = configuration;
     }
 
     [HttpGet]
@@ -38,6 +42,7 @@ public class EventsController : ControllerBase
             list = list.Where(e => new[] { e.Title, e.Place, e.Address, e.Description, e.Category }
                 .Any(value => value.Contains(query, StringComparison.OrdinalIgnoreCase))).ToList();
         }
+        foreach (var eventItem in list) SetTicketSalesAvailability(eventItem);
         return Ok(list);
     }
 
@@ -47,6 +52,7 @@ public class EventsController : ControllerBase
         var e = _store.GetById(id);
         if (e == null)
             return NotFound();
+        SetTicketSalesAvailability(e);
         return Ok(e);
     }
 
@@ -55,8 +61,8 @@ public class EventsController : ControllerBase
     {
         if (_store.GetById(id) is null) return NotFound();
         var user = _telegramAuth.ValidateInitData(initData);
-        var goingCount = _db.EventInterests.Count(x => x.EventId == id);
-        var userGoing = user is not null && _db.EventInterests.Any(x => x.EventId == id && x.TelegramUserId == user.Id);
+        var goingCount = _db.EventParticipations.Count(x => x.EventId == id);
+        var userGoing = user is not null && _db.EventParticipations.Any(x => x.EventId == id && x.TelegramUserId == user.Id);
         return Ok(new EventGoingResponse(goingCount, userGoing));
     }
 
@@ -69,16 +75,16 @@ public class EventsController : ControllerBase
         if (eventItem is null) return NotFound();
         if (eventItem.IsDemo) return BadRequest("Для демонстрационных событий отметка участия отключена.");
 
-        var interest = _db.EventInterests.Find(id, user.Id);
-        if (interest is null)
-            _db.EventInterests.Add(new EventInterest { EventId = id, TelegramUserId = user.Id });
+        var participation = _db.EventParticipations.Find(id, user.Id);
+        if (participation is null)
+            _db.EventParticipations.Add(new EventParticipation { EventId = id, TelegramUserId = user.Id });
         else
-            _db.EventInterests.Remove(interest);
+            _db.EventParticipations.Remove(participation);
         _db.SaveChanges();
 
         var response = new EventGoingResponse(
-            _db.EventInterests.Count(x => x.EventId == id),
-            interest is null);
+            _db.EventParticipations.Count(x => x.EventId == id),
+            participation is null);
         return Ok(response);
     }
 
@@ -136,6 +142,14 @@ public class EventsController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 
+    private void SetTicketSalesAvailability(EventItem eventItem)
+    {
+        eventItem.TicketSalesEnabled = !eventItem.IsDemo &&
+            eventItem.Id == Tusa2026EventSeeder.EventId &&
+            !string.IsNullOrWhiteSpace(_configuration["Payments:TelegramPhysicalProviderToken"]) &&
+            eventItem.TicketCategories.Any(category => category.IsActive && category.Capacity > category.Sold);
+    }
+
     [HttpGet("pending")]
     public ActionResult<IEnumerable<EventItem>> Pending([FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
     {
@@ -145,11 +159,13 @@ public class EventsController : ControllerBase
     }
 
     [HttpPost("{id}/approve")]
-    public ActionResult<EventItem> Approve(string id, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
+    public async Task<ActionResult<EventItem>> Approve(string id, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData, CancellationToken cancellationToken)
     {
         var user = _telegramAuth.ValidateInitData(initData);
         if (user is null || !_users.IsAdmin(user.Id)) return Forbid();
         var approved = _store.Approve(id);
+        if (approved is not null)
+            await _interestNotifier.NotifyIfTicketsAvailableAsync(id, cancellationToken);
         return approved is null ? NotFound() : Ok(approved);
     }
 

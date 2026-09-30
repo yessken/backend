@@ -43,6 +43,7 @@ builder.Services.AddScoped<IEventsStore, EventsStore>();
 builder.Services.AddScoped<ITicketsStore, TicketsStore>();
 builder.Services.AddScoped<IUserStore, UserStore>();
 builder.Services.AddScoped<ITicketPricingService, TicketPricingService>();
+builder.Services.AddScoped<IEventInterestNotifier, EventInterestNotifier>();
 builder.Services.AddSingleton<ITelegramAuthService, TelegramAuthService>();
 builder.Services.AddScoped<ITelegramBotService, TelegramBotService>();
 builder.Services.AddHostedService<PrivateVenueNotifier>();

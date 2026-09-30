@@ -535,7 +535,13 @@ public class TelegramWebhookController : ControllerBase
             await _db.SaveChangesAsync(cancellationToken);
         }
         var count = await _db.EventInterests.CountAsync(x => x.EventId == eventId, cancellationToken);
-        await SendMessageAsync(token, message.Chat.Id, $"Отметил интерес к событию. Сейчас заинтересовались: {count}. Это не бронь и не покупка — билет можно оформить отдельно.", cancellationToken);
+        var hasTickets = eventId == Tusa2026EventSeeder.EventId &&
+                         !string.IsNullOrWhiteSpace(_configuration["Payments:TelegramPhysicalProviderToken"]) &&
+                         _events.GetById(eventId)?.TicketCategories.Any(category => category.IsActive && category.Capacity > category.Sold) == true;
+        var reply = hasTickets
+            ? $"Билеты на событие уже доступны. Откройте TUSA: {_configuration["Telegram:WebAppUrl"]?.TrimEnd('/')}/events/{Uri.EscapeDataString(eventId)}"
+            : $"Добавил вас в список уведомлений о билетах. Сейчас заинтересовались: {count}. Напишу, когда билеты появятся. Это не бронь и не покупка.";
+        await SendMessageAsync(token, message.Chat.Id, reply, cancellationToken);
     }
 
     private async Task ActivateSubscriptionAsync(string token, long chatId, string payload, string chargeId, CancellationToken cancellationToken)

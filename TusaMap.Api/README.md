@@ -72,6 +72,7 @@ dotnet run --project .\TusaMap.Api\TusaMap.Api.csproj
 - `GET /api/events/pending` — список заявок для admin Telegram ID
 - `POST /api/events/{id}/approve` — одобрить событие для admin Telegram ID
 - `POST /api/events/{id}/reject` — отклонить ожидающую заявку для admin Telegram ID
+- `GET /api/events/{id}/going` и `POST /api/events/{id}/going` — счётчик участия и переключение RSVP для проверенного Telegram-пользователя
 - `GET /api/tickets/me` — мои билеты (заголовок `X-Telegram-Init-Data`)
 - `POST /api/tickets` и `/api/tickets/public` — отключены, чтобы не создавать неоплаченные заказы. Билет оформляется через Telegram invoice.
 - `POST /api/tickets/quote` — проверить цену, категорию, лимит и промокод до создания заказа
@@ -83,6 +84,8 @@ dotnet run --project .\TusaMap.Api\TusaMap.Api.csproj
 - `/refundstars <Telegram_ID>` — admin-only возврат последней Organizer Pro оплаты через Telegram Stars API.
 
 После отправки заявки администраторы получают Telegram-уведомление (если заданы bot token и `Telegram:AdminUserIds`). Очередь доступна в Mini App: `/admin/event-review`. Решения разрешены только аккаунтам из серверного allowlist; повторно обработать уже закрытую заявку нельзя.
+
+На карточке платного события без доступной оплаты кнопка «Сообщить, когда билеты появятся» открывает бота и записывает Telegram-пользователя в список уведомлений. После одобрения события или добавления доступного тарифа бот отправляет ему одну попытку уведомления; успешная отправка отмечается в базе. Это не резервирует билет и не гарантирует доставку, если пользователь заблокировал бота. RSVP («Буду участвовать») хранится отдельно от интереса/ожидания билетов и доступен только после проверки Telegram `initData`.
 
 ### Граница доступа
 

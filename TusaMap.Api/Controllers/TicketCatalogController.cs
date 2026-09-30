@@ -13,16 +13,18 @@ public class TicketCatalogController : ControllerBase
     private readonly TusaMapDbContext _db;
     private readonly ITelegramAuthService _auth;
     private readonly IUserStore _users;
+    private readonly IEventInterestNotifier _interestNotifier;
 
-    public TicketCatalogController(TusaMapDbContext db, ITelegramAuthService auth, IUserStore users)
+    public TicketCatalogController(TusaMapDbContext db, ITelegramAuthService auth, IUserStore users, IEventInterestNotifier interestNotifier)
     {
         _db = db;
         _auth = auth;
         _users = users;
+        _interestNotifier = interestNotifier;
     }
 
     [HttpPost("ticket-categories")]
-    public ActionResult<TicketCategory> AddCategory(string eventId, [FromBody] TicketCategoryRequest request, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
+    public async Task<ActionResult<TicketCategory>> AddCategory(string eventId, [FromBody] TicketCategoryRequest request, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData, CancellationToken cancellationToken)
     {
         var user = _auth.ValidateInitData(initData);
         var ev = _db.Events.Find(eventId);
@@ -30,7 +32,8 @@ public class TicketCatalogController : ControllerBase
         if (ev.OrganizerTelegramId != user.Id && !_users.IsAdmin(user.Id)) return Forbid();
         var category = new TicketCategory { EventId = eventId, Name = request.Name.Trim(), Description = request.Description ?? "", Price = request.Price, Capacity = request.Capacity };
         _db.TicketCategories.Add(category);
-        _db.SaveChanges();
+        await _db.SaveChangesAsync(cancellationToken);
+        await _interestNotifier.NotifyIfTicketsAvailableAsync(eventId, cancellationToken);
         return Ok(category);
     }
 

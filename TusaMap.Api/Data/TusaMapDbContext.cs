@@ -16,6 +16,7 @@ public class TusaMapDbContext : DbContext
     public DbSet<PromoRedemption> PromoRedemptions => Set<PromoRedemption>();
     public DbSet<FunnelEvent> FunnelEvents => Set<FunnelEvent>();
     public DbSet<EventInterest> EventInterests => Set<EventInterest>();
+    public DbSet<EventParticipation> EventParticipations => Set<EventParticipation>();
     public DbSet<TicketCheckIn> TicketCheckIns => Set<TicketCheckIn>();
     public DbSet<BotMessageLog> BotMessageLogs => Set<BotMessageLog>();
 
@@ -40,6 +41,8 @@ public class TusaMapDbContext : DbContext
         modelBuilder.Entity<PromoRedemption>().HasIndex(x => new { x.PromoCodeId, x.TelegramUserId });
         modelBuilder.Entity<FunnelEvent>().HasIndex(x => new { x.Name, x.EventId, x.Ref });
         modelBuilder.Entity<EventInterest>().HasKey(x => new { x.EventId, x.TelegramUserId });
+        modelBuilder.Entity<EventInterest>().HasIndex(x => new { x.EventId, x.TicketAvailabilityNotifiedAt });
+        modelBuilder.Entity<EventParticipation>().HasKey(x => new { x.EventId, x.TelegramUserId });
         modelBuilder.Entity<TicketCheckIn>().HasKey(x => x.Id);
         modelBuilder.Entity<TicketCheckIn>().HasIndex(x => x.TicketId).IsUnique();
         modelBuilder.Entity<Ticket>().HasOne(x => x.CheckIn).WithOne().HasForeignKey<TicketCheckIn>(x => x.TicketId);
