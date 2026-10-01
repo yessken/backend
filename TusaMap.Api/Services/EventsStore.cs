@@ -35,7 +35,8 @@ public class EventsStore : IEventsStore
             ["3"] = "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?auto=format&fit=crop&w=1200&q=85",
             ["4"] = "https://images.unsplash.com/photo-1585699324551-f6c309eedeca?auto=format&fit=crop&w=1200&q=85",
         };
-        var events = _db.Events.Where(eventItem => stableImages.ContainsKey(eventItem.Id) && eventItem.ImageUrl.Contains("picsum.photos")).ToList();
+        var seedIds = stableImages.Keys.ToArray();
+        var events = _db.Events.Where(eventItem => seedIds.Contains(eventItem.Id) && eventItem.ImageUrl.Contains("picsum.photos")).ToList();
         foreach (var eventItem in events) eventItem.ImageUrl = stableImages[eventItem.Id];
         if (events.Count > 0) _db.SaveChanges();
     }
