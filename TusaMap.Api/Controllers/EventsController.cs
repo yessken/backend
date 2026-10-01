@@ -165,21 +165,26 @@ public class EventsController : ControllerBase
         if (user is null || !_users.IsAdmin(user.Id)) return Forbid();
         var approved = _store.Approve(id);
         if (approved is not null)
+        {
+            await _telegramBot.NotifyOrganizerOfEventReviewAsync(approved, approved: true, cancellationToken);
             await _interestNotifier.NotifyIfTicketsAvailableAsync(id, cancellationToken);
+        }
         return approved is null ? NotFound() : Ok(approved);
     }
 
     [HttpPost("{id}/reject")]
-    public ActionResult<EventItem> Reject(string id, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData)
+    public async Task<ActionResult<EventItem>> Reject(string id, [FromHeader(Name = "X-Telegram-Init-Data")] string? initData, CancellationToken cancellationToken)
     {
         var user = _telegramAuth.ValidateInitData(initData);
         if (user is null || !_users.IsAdmin(user.Id)) return Forbid();
         var rejected = _store.Reject(id);
+        if (rejected is not null)
+            await _telegramBot.NotifyOrganizerOfEventReviewAsync(rejected, approved: false, cancellationToken);
         return rejected is null ? NotFound() : Ok(rejected);
     }
 }
 
-public class CreateEventRequest
+public class CreateEventRequest : IValidatableObject
 {
     [Required, StringLength(120, MinimumLength = 3)]
     public string Title { get; set; } = "";
@@ -204,6 +209,12 @@ public class CreateEventRequest
     [Phone, StringLength(30)]
     public string? OrganizerPhone { get; set; }
     public List<CreateTicketCategoryRequest> TicketCategories { get; set; } = [];
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (string.IsNullOrWhiteSpace(OrganizerEmail) && string.IsNullOrWhiteSpace(OrganizerPhone))
+            yield return new ValidationResult("Укажите email или телефон, чтобы TUSA могла связаться по заявке.", [nameof(OrganizerEmail), nameof(OrganizerPhone)]);
+    }
 }
 
 public class CreateTicketCategoryRequest

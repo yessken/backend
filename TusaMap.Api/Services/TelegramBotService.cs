@@ -10,6 +10,7 @@ public interface ITelegramBotService
     Task NotifyAdminsOfTicketSaleAsync(Ticket ticket, CancellationToken cancellationToken = default);
     Task NotifyAdminsOfSubscriptionAsync(long telegramUserId, int stars, CancellationToken cancellationToken = default);
     Task NotifyAdminsOfEventSubmissionAsync(EventItem eventItem, CancellationToken cancellationToken = default);
+    Task NotifyOrganizerOfEventReviewAsync(EventItem eventItem, bool approved, CancellationToken cancellationToken = default);
     Task<bool> NotifyTicketAvailabilityAsync(long telegramUserId, string eventTitle, string eventUrl, CancellationToken cancellationToken = default);
     Task<bool> NotifyAdminsOfPaymentSupportAsync(long telegramUserId, string details, CancellationToken cancellationToken = default);
     Task<bool> SendPrivateVenueAddressAsync(long telegramUserId, string eventTitle, string address, string date, string time, CancellationToken cancellationToken = default);
@@ -65,6 +66,30 @@ public class TelegramBotService : ITelegramBotService
         var text = $"Новая заявка на событие\n\n{eventItem.Title}\n{eventItem.Date} · {eventItem.Time} · {eventItem.Place}\n{eventItem.Category} · {(eventItem.Price is null or 0 ? "бесплатно" : $"{eventItem.Price:N0} ₸")}\nID: {eventItem.Id}" +
                    (string.IsNullOrWhiteSpace(contact) ? "" : $"\n\n{contact}") + reviewUrl;
         return NotifyAdminsAsync(text, cancellationToken);
+    }
+
+    public async Task NotifyOrganizerOfEventReviewAsync(EventItem eventItem, bool approved, CancellationToken cancellationToken = default)
+    {
+        if (eventItem.OrganizerTelegramId == 0) return;
+        var token = _configuration["Telegram:BotToken"];
+        if (string.IsNullOrWhiteSpace(token)) return;
+        var appUrl = _configuration["Telegram:WebAppUrl"]?.TrimEnd('/');
+        var eventUrl = string.IsNullOrWhiteSpace(appUrl) ? "" : $"\n\nОткрыть TUSA: {appUrl}/events/{Uri.EscapeDataString(eventItem.Id)}";
+        var text = approved
+            ? $"Хорошие новости: событие «{eventItem.Title}» одобрено и опубликовано в TUSA.{eventUrl}"
+            : $"Заявка на событие «{eventItem.Title}» пока не одобрена. Напишите нам, если хотите уточнить детали или подать её повторно.";
+        try
+        {
+            using var response = await _clients.CreateClient().PostAsJsonAsync(
+                $"https://api.telegram.org/bot{token}/sendMessage",
+                new { chat_id = eventItem.OrganizerTelegramId, text }, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+                _logger.LogWarning("Organizer review notification failed for event {EventId}: {StatusCode}", eventItem.Id, response.StatusCode);
+        }
+        catch (HttpRequestException exception)
+        {
+            _logger.LogWarning(exception, "Organizer review notification transport failed for event {EventId}", eventItem.Id);
+        }
     }
 
     public async Task<bool> NotifyTicketAvailabilityAsync(long telegramUserId, string eventTitle, string eventUrl, CancellationToken cancellationToken = default)
